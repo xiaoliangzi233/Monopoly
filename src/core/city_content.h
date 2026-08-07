@@ -9,8 +9,12 @@ namespace neon {
 
 class CityContent final {
 public:
-    static QList<TileDefinition> createNeonCityMap();
+    static constexpr quint32 ContentVersion = 2;
+    static QList<TileDefinition> createProsperousCityMap();
+    static QByteArray contentHash();
     static QStringList characterNames();
+    static QStringList characterBiographies();
+    static QStringList districtNames();
     static QStringList cityPulseEvents();
     static QStringList strategyCards();
     static QStringList personalEvents();

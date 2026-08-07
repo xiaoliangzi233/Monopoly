@@ -9,18 +9,28 @@ namespace neon {
 class GameState final {
 public:
     QUuid matchId;
-    quint32 rulesVersion = 1;
+    quint32 rulesVersion = 2;
+    quint32 contentVersion = 2;
+    QByteArray contentHash;
     quint64 sequence = 0;
     quint64 randomSeed = 0;
     int round = 1;
     int maxRounds = 24;
     int currentPlayer = 0;
     int lastDice = 0;
+    int pendingDice = 0;
+    QList<QList<int>> routeOptions;
     int activePulse = -1;
     int rentModifierPercent = 100;
     int buildingCostPercent = 100;
     int purchaseRebatePercent = 0;
     GamePhase phase = GamePhase::Waiting;
+    int auctionTile = -1;
+    int auctionHighBid = 0;
+    QUuid auctionHighBidder;
+    QList<QUuid> auctionPassedPlayers;
+    qint64 auctionDeadlineMs = 0;
+    TradeOfferState tradeOffer;
     QList<TileDefinition> tiles;
     QList<PropertyState> properties;
     QList<PlayerState> players;

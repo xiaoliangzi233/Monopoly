@@ -2,7 +2,9 @@
 
 #include <QColor>
 #include <QMetaType>
-#include <QPoint>
+#include <QPointF>
+#include <QPolygonF>
+#include <QRectF>
 #include <QString>
 #include <QUuid>
 #include <QVariantMap>
@@ -15,10 +17,11 @@ enum class TileType {
     Property,
     Event,
     Transit,
-    Shop,
-    Service,
+    Guild,
+    Civic,
     Tax,
-    Mission
+    Commission,
+    Festival
 };
 Q_ENUM_NS(TileType)
 
@@ -31,15 +34,25 @@ enum class CommandType {
     UseReroll,
     ChooseRoute,
     UseCard,
-    UseSkill
+    UseSkill,
+    PlaceBid,
+    PassAuction,
+    ProposeTrade,
+    RespondTrade,
+    SellProperty,
+    ContributeCivic
 };
 Q_ENUM_NS(CommandType)
 
 enum class GamePhase {
     Waiting,
     AwaitingRoll,
+    AwaitingRoute,
     Moving,
     AwaitingDecision,
+    Auction,
+    Trade,
+    ForcedSettlement,
     Finished
 };
 Q_ENUM_NS(GamePhase)
@@ -61,10 +74,14 @@ struct GameEvent {
 
 struct TileDefinition {
     int index = 0;
-    QPoint gridPosition;
+    QPointF worldPosition;
+    QList<int> neighbors;
+    QPolygonF roadPolygon;
+    QRectF industryFootprint;
     TileType type = TileType::Event;
     QString name;
     int district = -1;
+    QString styleId;
     int price = 0;
     int baseRent = 0;
 };
@@ -82,15 +99,38 @@ struct PlayerState {
     QColor color;
     int characterIndex = 0;
     int position = 0;
+    int previousPosition = -1;
     int cash = 18000;
-    int energy = 2;
+    int reputation = 0;
+    int culture = 0;
+    int livelihood = 0;
+    int energy = 3;
+    int rerolls = 1;
     int movementBonus = 0;
     int shieldCharges = 0;
     int skillCooldown = 0;
+    int upgradeDiscountPercent = 0;
+    int boostedIndustryTile = -1;
+    int boostedCollections = 0;
     QList<int> strategyCards;
-    int missionScore = 0;
+    QList<int> commissions;
+    QStringList statusEffects;
     bool bankrupt = false;
     bool aiControlled = false;
+    bool tradedThisTurn = false;
+};
+
+struct TradeOfferState {
+    bool active = false;
+    QUuid proposerId;
+    QUuid recipientId;
+    int offeredCash = 0;
+    int requestedCash = 0;
+    int offeredTile = -1;
+    int requestedTile = -1;
+    int offeredCardSlot = -1;
+    int requestedCardSlot = -1;
+    qint64 deadlineMs = 0;
 };
 
 struct CommandResult {
