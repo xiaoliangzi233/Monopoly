@@ -1,0 +1,17 @@
+/build/
+/.cache/
+/.qt/
+/.vscode/
+/.idea/
+*.user
+*.autosave
+*.qmlc
+*.jsc
+*.exe
+*.dll
+*.a
+*.lib
+*.pdb
+*.zip
+*.7z
+updates/staging/

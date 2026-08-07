@@ -1,0 +1,97 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          arch: win64_msvc2022_64
+          modules: qtshadertools
+      - uses: seanmiddleditch/gha-setup-ninja@v5
+      - name: Install release dependencies
+        shell: pwsh
+        run: |
+          choco install nsis -y --no-progress
+          vcpkg install libsodium:x64-windows
+          python -m pip install pynacl requests
+      - name: Configure production build
+        shell: pwsh
+        run: >-
+          cmake -S . -B build/release -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+          -DNEON_UPDATE_PUBLIC_KEY_HEX="${{ vars.UPDATE_PUBLIC_KEY_HEX }}"
+          -DNEON_GITHUB_MANIFEST_URL="${{ vars.GITHUB_MANIFEST_URL }}"
+          -DNEON_GITEE_MANIFEST_URL="${{ vars.GITEE_MANIFEST_URL }}"
+      - name: Build and test
+        shell: pwsh
+        run: |
+          cmake --build build/release
+          $env:NEON_SIMULATION_GAMES='10000'
+          ctest --test-dir build/release --output-on-failure
+      - name: Package NSIS installer
+        shell: pwsh
+        run: cpack --config build/release/CPackConfig.cmake -G NSIS -B dist
+      - name: Resolve release metadata
+        id: meta
+        shell: pwsh
+        run: |
+          $asset=(Get-ChildItem dist -Filter '*.exe' | Select-Object -First 1)
+          if (!$asset) { throw 'NSIS installer was not produced' }
+          "asset=$($asset.FullName)" >> $env:GITHUB_OUTPUT
+          "asset_name=$($asset.Name)" >> $env:GITHUB_OUTPUT
+          "version=${{ github.ref_name }}".Replace('version=v','version=') >> $env:GITHUB_OUTPUT
+          if ('${{ github.ref_name }}' -match '-') { 'channel=beta' >> $env:GITHUB_OUTPUT } else { 'channel=stable' >> $env:GITHUB_OUTPUT }
+      - name: Publish GitHub release
+        shell: pwsh
+        env: { GH_TOKEN: '${{ github.token }}' }
+        run: gh release create "${{ github.ref_name }}" "${{ steps.meta.outputs.asset }}" --generate-notes ${{ contains(github.ref_name, '-') && '--prerelease' || '' }}
+      - name: Publish Gitee release
+        id: gitee
+        shell: pwsh
+        env:
+          GITEE_TOKEN: '${{ secrets.GITEE_TOKEN }}'
+        run: >-
+          python scripts/publish_gitee.py
+          --repository "${{ vars.GITEE_REPOSITORY }}"
+          --tag "${{ github.ref_name }}"
+          --asset "${{ steps.meta.outputs.asset }}"
+          ${{ contains(github.ref_name, '-') && '--prerelease' || '' }}
+      - name: Generate signed dual-source manifests
+        shell: pwsh
+        env:
+          UPDATE_SIGNING_KEY: '${{ secrets.UPDATE_SIGNING_KEY }}'
+        run: |
+          $githubUrl="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/${{ steps.meta.outputs.asset_name }}"
+          python scripts/sign_manifest.py --channel "${{ steps.meta.outputs.channel }}" --version "${{ steps.meta.outputs.version }}" --url $githubUrl --file "${{ steps.meta.outputs.asset }}" --output "manifests/github/${{ steps.meta.outputs.channel }}.json"
+          python scripts/sign_manifest.py --channel "${{ steps.meta.outputs.channel }}" --version "${{ steps.meta.outputs.version }}" --url "${{ steps.gitee.outputs.download_url }}" --file "${{ steps.meta.outputs.asset }}" --output "manifests/gitee/${{ steps.meta.outputs.channel }}.json"
+      - name: Publish manifest branch and mirror tags
+        shell: pwsh
+        env:
+          GITEE_TOKEN: '${{ secrets.GITEE_TOKEN }}'
+        run: |
+          git config user.name 'neon-release-bot'
+          git config user.email 'release-bot@users.noreply.github.com'
+          git remote add gitee "https://oauth2:$env:GITEE_TOKEN@gitee.com/${{ vars.GITEE_REPOSITORY }}.git"
+          git push gitee "HEAD:refs/heads/${{ github.event.repository.default_branch }}"
+          git push gitee "${{ github.ref_name }}"
+          git fetch origin update-manifests 2>$null
+          if ($LASTEXITCODE -eq 0) { git switch update-manifests } else { git switch --orphan update-manifests; git rm -rf . }
+          New-Item -ItemType Directory -Force updates/github,updates/gitee | Out-Null
+          Copy-Item "manifests/github/${{ steps.meta.outputs.channel }}.json" "updates/github/${{ steps.meta.outputs.channel }}.json"
+          Copy-Item "manifests/gitee/${{ steps.meta.outputs.channel }}.json" "updates/gitee/${{ steps.meta.outputs.channel }}.json"
+          git add updates
+          git commit -m "Update ${{ steps.meta.outputs.channel }} manifest to ${{ steps.meta.outputs.version }}"
+          git push origin update-manifests
+          git push gitee update-manifests
