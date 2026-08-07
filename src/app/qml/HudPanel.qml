@@ -1,8 +1,9 @@
 import QtQuick
 
 Rectangle {
-    color: "#D90C1426"
-    border.color: "#4A6E8FAF"
+    color: "#E8243932"
+    border.color: "#A9B68A5B"
     border.width: 1
-    radius: 16
+    radius: 7
+    Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; height: 2; color: "#D3AA4D"; opacity: .72 }
 }

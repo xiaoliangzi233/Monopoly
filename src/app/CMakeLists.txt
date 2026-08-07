@@ -2,8 +2,10 @@ qt_add_executable(neon_tycoon WIN32
     main.cpp
     game_view_model.h
     game_view_model.cpp
-    isometric_board.h
-    isometric_board.cpp
+    procedural_audio.h
+    procedural_audio.cpp
+    top_down_city_view.h
+    top_down_city_view.cpp
 )
 
 qt_add_qml_module(neon_tycoon
@@ -18,6 +20,10 @@ qt_add_qml_module(neon_tycoon
 target_include_directories(neon_tycoon PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_link_libraries(neon_tycoon PRIVATE neon_core neon_network
     Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2)
+if(TARGET Qt6::Multimedia)
+    target_link_libraries(neon_tycoon PRIVATE Qt6::Multimedia)
+    target_compile_definitions(neon_tycoon PRIVATE NEON_HAVE_MULTIMEDIA=1)
+endif()
 set_target_properties(neon_tycoon PROPERTIES OUTPUT_NAME NeonTycoon)
 
 include(GNUInstallDirs)
