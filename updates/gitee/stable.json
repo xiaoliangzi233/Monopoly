@@ -1,0 +1,9 @@
+{
+  "channel": "stable",
+  "version": "0.1.0",
+  "minimumLauncherVersion": "0.1.0",
+  "url": "https://gitee.com/small-quantum/Monopoly/releases/download/v0.1.0/Neon%20Tycoon-0.1.0-win64.exe",
+  "size": 31345483,
+  "sha256": "d1bce6748df2705aa657e0a03bc91a3e8de091241545782261a074cb1ed5dfb4",
+  "signature": "TDDxL0594t1yUpJ7rAGLLOa4PXMEdKm+flrtqMbj90siAKa/E07KWNtFcT8P8fFUMGrlZOzB6SWfOVvLQ0j0DQ=="
+}

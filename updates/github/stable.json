@@ -1,0 +1,9 @@
+{
+  "channel": "stable",
+  "version": "0.1.0",
+  "minimumLauncherVersion": "0.1.0",
+  "url": "https://github.com/xiaoliangzi233/Monopoly/releases/download/v0.1.0/Neon.Tycoon-0.1.0-win64.exe",
+  "size": 31345483,
+  "sha256": "d1bce6748df2705aa657e0a03bc91a3e8de091241545782261a074cb1ed5dfb4",
+  "signature": "AL0j9B8PTPjJpshSU0Ef7KcAso/+Pt7rfcNhm1yMcdb5DrV2nHWAHoZUZw8wb1UZhaUYglkTAXauqTRG0Nn0BA=="
+}
