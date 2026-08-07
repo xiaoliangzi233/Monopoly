@@ -56,7 +56,7 @@ cpack --config build/release/CPackConfig.cmake -G NSIS
 - `GITEE_TOKEN`：仅授予目标 Gitee 仓库和 Release 所需最小权限。
 - `UPDATE_SIGNING_KEY`：Ed25519 私钥的 Base64 编码，仅供 CI 签署更新清单。
 
-以及 Repository Variable `GITEE_REPOSITORY`，格式为 `owner/repository`。令牌和私钥不得写入源码、清单、客户端或聊天记录。
+以及 Repository Variables `GITEE_REPOSITORY`、`PRIMARY_MANIFEST_URL`、`GITEE_MANIFEST_URL` 和 `UPDATE_PUBLIC_KEY_HEX`。`GITEE_REPOSITORY` 格式为 `owner/repository`。令牌和私钥不得写入源码、清单、客户端或聊天记录。
 
 配置 CMake 缓存项 `NEON_UPDATE_PUBLIC_KEY_HEX`、`NEON_GITHUB_MANIFEST_URL` 和 `NEON_GITEE_MANIFEST_URL` 后，生产启动器才会接受远程更新。清单 URL 指向各源的 `stable.json`；当玩家切换到测试通道时，启动器会自动请求同目录的 `beta.json`。未配置公钥时启动器采用失败关闭策略，只允许启动已安装版本。
 

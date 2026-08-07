@@ -32,7 +32,7 @@ jobs:
           -DCMAKE_BUILD_TYPE=Release
           -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
           -DNEON_UPDATE_PUBLIC_KEY_HEX="${{ vars.UPDATE_PUBLIC_KEY_HEX }}"
-          -DNEON_GITHUB_MANIFEST_URL="${{ vars.GITHUB_MANIFEST_URL }}"
+          -DNEON_GITHUB_MANIFEST_URL="${{ vars.PRIMARY_MANIFEST_URL }}"
           -DNEON_GITEE_MANIFEST_URL="${{ vars.GITEE_MANIFEST_URL }}"
       - name: Build and test
         shell: pwsh
@@ -80,10 +80,12 @@ jobs:
         shell: pwsh
         env:
           GITEE_TOKEN: '${{ secrets.GITEE_TOKEN }}'
+          GIT_ASKPASS: '${{ github.workspace }}\scripts\git-askpass.cmd'
+          GIT_TERMINAL_PROMPT: '0'
         run: |
           git config user.name 'neon-release-bot'
           git config user.email 'release-bot@users.noreply.github.com'
-          git remote add gitee "https://oauth2:$env:GITEE_TOKEN@gitee.com/${{ vars.GITEE_REPOSITORY }}.git"
+          git remote add gitee "https://oauth2@gitee.com/${{ vars.GITEE_REPOSITORY }}.git"
           git push gitee "HEAD:refs/heads/${{ github.event.repository.default_branch }}"
           git push gitee "${{ github.ref_name }}"
           git fetch origin update-manifests 2>$null
