@@ -43,6 +43,25 @@ ctest --test-dir build/msys --output-on-failure
 cpack --config build/release/CPackConfig.cmake -G NSIS
 ```
 
+## 一键发布
+
+在 Windows 上双击仓库根目录的 `publish_release.bat`。它会检查工作区和 GitHub CLI 登录状态，将 `VERSION` 的补丁版本自动加一，执行 Release 构建与 10,000 局模拟测试，然后提交、同步 GitHub/Gitee、创建标签并等待发布工作流。
+
+常用命令：
+
+```powershell
+# 只检查环境、版本与脚本，不改变任何内容
+.\scripts\publish_release.ps1 -Version 0.1.1 -SkipTests -DryRun -Yes
+
+# 发布指定版本
+.\publish_release.bat -Version 0.1.1
+
+# 对已有标签重跑发布（不再提升版本）
+.\publish_release.bat -RetryTag v0.1.1
+```
+
+GitHub 网页也可在 **Actions → Release → Run workflow** 中输入已存在的标签手动重跑。发布签名私钥只保存在 GitHub Secret；本地脚本不读取、生成或输出私钥。执行前必须保证 GitHub Actions 账户状态正常。
+
 ## 联机
 
 房主在“联机”面板配置总人数和 AI 数并创建房间。局域网或 Radmin 玩家填写房主 IPv4，默认 TCP/UDP 端口为 `29450/29451`。防火墙需允许游戏访问专用网络。

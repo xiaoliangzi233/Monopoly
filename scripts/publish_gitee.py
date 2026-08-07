@@ -18,6 +18,7 @@ def main() -> None:
     parser.add_argument("--asset", type=Path, required=True)
     parser.add_argument("--prerelease", action="store_true")
     parser.add_argument("--target-commitish", default="main")
+    parser.add_argument("--replace-existing", action="store_true")
     args = parser.parse_args()
     token = os.environ.get("GITEE_TOKEN", "")
     if not token:
@@ -36,7 +37,20 @@ def main() -> None:
         params={"access_token": token},
         timeout=30,
     )
-    if lookup.status_code == 200:
+    if lookup.status_code == 200 and args.replace_existing:
+        old_release = lookup.json()
+        deletion = requests.delete(
+            f"{base}/releases/{old_release['id']}",
+            data={"access_token": token},
+            timeout=30,
+        )
+        if deletion.status_code not in (200, 204):
+            raise SystemExit(f"Gitee release deletion failed ({deletion.status_code}): {deletion.text}")
+        release_response = requests.post(f"{base}/releases", data=common, timeout=30)
+        if not release_response.ok:
+            raise SystemExit(f"Gitee release recreation failed ({release_response.status_code}): {release_response.text}")
+        release = release_response.json()
+    elif lookup.status_code == 200:
         release = lookup.json()
     elif lookup.status_code == 404:
         release_response = requests.post(f"{base}/releases", data=common, timeout=30)
