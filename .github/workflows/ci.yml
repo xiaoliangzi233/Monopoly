@@ -14,7 +14,7 @@ jobs:
         with:
           version: '6.8.3'
           arch: win64_msvc2022_64
-          modules: qtshadertools
+          modules: qtshadertools qtmultimedia
           cache: true
       - uses: seanmiddleditch/gha-setup-ninja@v5
       - name: Install libsodium

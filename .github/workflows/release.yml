@@ -25,7 +25,7 @@ jobs:
         with:
           version: '6.8.3'
           arch: win64_msvc2022_64
-          modules: qtshadertools
+          modules: qtshadertools qtmultimedia
       - uses: seanmiddleditch/gha-setup-ninja@v5
       - name: Install release dependencies
         shell: pwsh
@@ -107,7 +107,7 @@ jobs:
           GIT_ASKPASS: '${{ github.workspace }}\scripts\git-askpass.cmd'
           GIT_TERMINAL_PROMPT: '0'
         run: |
-          git config user.name 'neon-release-bot'
+          git config user.name 'shengshi-release-bot'
           git config user.email 'release-bot@users.noreply.github.com'
           git remote add gitee "https://oauth2@gitee.com/${{ vars.GITEE_REPOSITORY }}.git"
           git push gitee "${{ steps.meta.outputs.tag }}"

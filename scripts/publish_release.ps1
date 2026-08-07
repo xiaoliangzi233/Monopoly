@@ -127,18 +127,22 @@ if ($DryRun) {
 $knownRuns = @(Get-ReleaseRuns | ForEach-Object { [long]$_.databaseId })
 $committed = $false
 try {
-    [System.IO.File]::WriteAllText($versionFile, "$numericVersion`n", [System.Text.UTF8Encoding]::new($false))
-    Invoke-External -File 'git' -Arguments @('add', 'VERSION') -FailureMessage 'Unable to stage VERSION'
-    Invoke-External -File 'git' -Arguments @('commit', '-m', "Release $tag") -FailureMessage 'Version commit failed'
-    $committed = $true
+    if ($current -ne $numericVersion) {
+        [System.IO.File]::WriteAllText($versionFile, "$numericVersion`n", [System.Text.UTF8Encoding]::new($false))
+        Invoke-External -File 'git' -Arguments @('add', 'VERSION') -FailureMessage 'Unable to stage VERSION'
+        Invoke-External -File 'git' -Arguments @('commit', '-m', "Release $tag") -FailureMessage 'Version commit failed'
+        $committed = $true
+    } else {
+        Write-Host 'VERSION already matches; tagging the tested current commit.'
+    }
     Invoke-External -File 'git' -Arguments @('push', 'gitee', 'main') -FailureMessage 'Gitee main push failed'
     Invoke-External -File 'git' -Arguments @('push', 'origin', 'main') -FailureMessage 'GitHub main push failed'
-    Invoke-External -File 'git' -Arguments @('tag', '-a', $tag, '-m', "Neon Tycoon $Version") `
+    Invoke-External -File 'git' -Arguments @('tag', '-a', $tag, '-m', "Shengshi Baiye $Version") `
         -FailureMessage 'Tag creation failed'
     Invoke-External -File 'git' -Arguments @('push', 'gitee', $tag) -FailureMessage 'Gitee tag push failed'
     Invoke-External -File 'git' -Arguments @('push', 'origin', $tag) -FailureMessage 'GitHub tag push failed'
 } catch {
-    if (!$committed) {
+    if ($current -ne $numericVersion -and !$committed) {
         [System.IO.File]::WriteAllText($versionFile, "$current`n", [System.Text.UTF8Encoding]::new($false))
         git reset VERSION *> $null
     }

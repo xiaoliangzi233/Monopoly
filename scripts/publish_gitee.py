@@ -29,7 +29,7 @@ def main() -> None:
         "tag_name": args.tag,
         "target_commitish": args.target_commitish,
         "name": args.tag,
-        "body": "Automated Neon Tycoon release",
+        "body": "Automated Shengshi Baiye release",
         "prerelease": str(args.prerelease).lower(),
     }
     lookup = requests.get(

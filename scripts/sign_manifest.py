@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create a deterministic Ed25519-signed Neon Tycoon update manifest."""
+"""Create a deterministic Ed25519-signed Shengshi Baiye update manifest."""
 
 from __future__ import annotations
 

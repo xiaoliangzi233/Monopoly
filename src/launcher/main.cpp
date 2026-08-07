@@ -12,6 +12,7 @@ int main(int argc, char *argv[])
     QGuiApplication app(argc, argv);
     QCoreApplication::setOrganizationName(QStringLiteral("NeonTycoon"));
     QCoreApplication::setApplicationName(QStringLiteral("Neon Tycoon Launcher"));
+    QGuiApplication::setApplicationDisplayName(QStringLiteral("盛世百业启动器"));
     neon::launcher::UpdateController updater;
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("updater"), &updater);

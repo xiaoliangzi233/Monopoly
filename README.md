@@ -1,24 +1,26 @@
-# 霓城大亨 / Neon Tycoon
+# 盛世百业
 
-一款使用 C++20 与 Qt 6 开发的原创 2.5D 城市经营派对游戏。地图、建筑、人物、道路和装饰物全部由程序化几何绘制，不依赖外部美术贴图。
+《盛世百业》是一款使用 C++20 与 Qt Quick 开发的原创国潮多人经营游戏。玩家扮演鲁班、黄道婆、李时珍、沈括、李清照或郑和，在架空盛世的八个街区经营产业、参与竞价与交易，并以财富、商誉、文脉、民生四维繁荣决出胜负。
 
-## 当前可玩内容
+公开名称自 v0.2.0 起改为《盛世百业》。为保证 v0.1.0 玩家能够原地升级，内部程序名仍为 `NeonTycoon.exe`，启动器仍为 `NeonTycoonLauncher.exe`，应用数据目录和安装目录标识也保持不变。
 
-- 48 格等距霓虹城市地图、24 块地产和 8 个街区。
-- 2–6 名玩家，本地热座与三级 AI 混合对局。
-- 掷骰、有限重掷、买地、三级建设、租金、税费、抵押/赎回和限轮计分。
-- 6 名角色的主动技能与被动能力、36 张策略卡、30 个个人事件、18 个任务和 8 种可改变租金/建造价格/玩家状态的城市脉冲。
-- 高性能 Qt Scene Graph 场景：建筑立面、屋顶、窗户、招牌、天线、道路、路灯、树木、交通站和人物均由代码绘制。
-- 世界锚点与深度排序；当前角色始终有顶层轮廓和光环，所在建筑自动淡化。
-- 折叠侧栏、悬浮信息、上下文操作栏、默认最大化窗口和高 DPI UI。
-- 房主权威 TCP 联机、CBOR 协议、UDP 局域网发现、状态哈希、快照同步、唯一席位授权和断线 AI 托管。
-- SHA-256 原子存档、快速恢复、独立启动器、GitHub/Gitee 双更新源和 Ed25519 签名校验。
+## v0.2.0 内容
 
-当前版本是可安装、可玩和可联机的 Alpha。交易协商、限时拍卖、两个真实路线分支、全量卡牌独立效果、更完整的断线恢复 UI、更新器版本目录原子切换/自动回滚以及最终数值平衡仍是正式版的后续工作。
+- 4096×3072 正交俯视世界、64 个相连节点、八个国潮街区和分支路线。
+- 32 处三级产业，以及奇遇、驿站/漕运、商会、民生、文会、税课和节庆节点。
+- 空白处左键或中键拖拽、滚轮光标中心缩放、WASD/方向键平移、回合自动聚焦、移动跟随和可折叠舆图。
+- 2–6 人本地热座、AI 或局域网/Radmin IPv4 联机；协议 v2 使用房主权威随机数、幂等命令、事件序号、状态哈希和快照重同步。
+- 路线选择、重掷、购买、三级建设、典当、出售、30 秒竞价、交易、角色主动技能、节令事件和四维终局计分。
+- 48 张筹策卡、36 个个人奇遇、24 个委托和 12 个节令事件。
+- 全部道路、院墙、屋顶、摊位、树木、桥梁、灯笼和人物均由代码生成，不依赖来源不明的外部游戏贴图。
+- 程序化五声音阶音乐与操作音效；音乐、效果音和静音设置独立持久化。缺少 Qt Multimedia 时仍可构建静音版本。
+- v2 原子存档与 SHA-256 校验。v0.1.0 存档不会误迁移，而会安全归档到 `saves/archive-v1`。
 
-## 本地构建
+默认标准局为 32 轮，也可选择 24 或 40 轮。仅剩一名未破产玩家时提前结束；否则总繁荣满分 400，同分依次比较现金、未典当产业数和座位顺序。
 
-要求：CMake 3.24+、Ninja、Qt 6.4+（正式 CI 使用 Qt 6.8 LTS）、支持 C++20 的编译器。Windows 推荐 MSVC 2022；也可使用匹配同一 MSYS2 环境的 MinGW Qt。
+## 构建与测试
+
+要求 CMake 3.24+、Ninja、Qt 6.8.3（Core、Gui、Network、Qml、Quick、QuickControls2、ShaderTools、Multimedia）和支持 C++20 的编译器。正式 CI 使用 MSVC 2022；本地也可使用匹配同一 MSYS2 环境的 MinGW Qt。
 
 ```powershell
 cmake -S . -B build/release -G Ninja `
@@ -28,59 +30,53 @@ cmake --build build/release
 ctest --test-dir build/release --output-on-failure
 ```
 
-本机 MSYS2 示例：
+执行完整 10,000 局模拟：
 
 ```powershell
-$env:PATH="C:\msys64\mingw64\bin;$env:PATH"
-cmake -S . -B build/msys -G Ninja -DCMAKE_PREFIX_PATH=C:/msys64/mingw64
-cmake --build build/msys
-ctest --test-dir build/msys --output-on-failure
+$env:NEON_SIMULATION_GAMES = '10000'
+ctest --test-dir build/release --output-on-failure
 ```
 
-游戏程序为 `NeonTycoon.exe`，启动器为 `NeonTycoonLauncher.exe`。使用 CPack 生成初始安装器：
+## 安装包与启动入口
+
+生成 NSIS 安装包：
 
 ```powershell
-cpack --config build/release/CPackConfig.cmake -G NSIS
+cpack --config build/release/CPackConfig.cmake -G NSIS -B build/installer
 ```
 
-## 一键发布
-
-在 Windows 上双击仓库根目录的 `publish_release.bat`。它会检查工作区和 GitHub CLI 登录状态，将 `VERSION` 的补丁版本自动加一，执行 Release 构建与 10,000 局模拟测试，然后提交、同步 GitHub/Gitee、创建标签并等待发布工作流。
-
-常用命令：
-
-```powershell
-# 只检查环境、版本与脚本，不改变任何内容
-.\scripts\publish_release.ps1 -Version 0.1.1 -SkipTests -DryRun -Yes
-
-# 发布指定版本
-.\publish_release.bat -Version 0.1.1
-
-# 对已有标签重跑发布（不再提升版本）
-.\publish_release.bat -RetryTag v0.1.1
-```
-
-GitHub 网页也可在 **Actions → Release → Run workflow** 中输入已存在的标签手动重跑。发布签名私钥只保存在 GitHub Secret；本地脚本不读取、生成或输出私钥。执行前必须保证 GitHub Actions 账户状态正常。
+v0.2.0 文件名为 `ShengshiBaiye-0.2.0-win64.exe`。安装器会创建桌面和开始菜单“盛世百业”快捷方式，目标为安装目录中的 `bin\NeonTycoonLauncher.exe`。玩家应从这个启动器进入游戏，以便先检查 GitHub/Gitee 更新；也可直接运行同目录的 `NeonTycoon.exe`。
 
 ## 联机
 
-房主在“联机”面板配置总人数和 AI 数并创建房间。局域网或 Radmin 玩家填写房主 IPv4，默认 TCP/UDP 端口为 `29450/29451`。防火墙需允许游戏访问专用网络。
+房主在“联机”面板设置人数和 AI 并创建房间。局域网或 Radmin 玩家填写房主 IPv4，默认 TCP 游戏端口为 `29450`，UDP 发现端口为 `29451`。防火墙需要允许游戏访问专用网络。协议 v1 客户端会收到明确的不兼容提示，不能加入 v2 房间。
 
-服务端只接受当前连接被分配席位的命令，并再次校验对局、玩家、阶段、余额和产权。远程玩家掉线 60 秒后由 AI 接管；保留的玩家身份允许重连恢复。
+房主只接受连接所获座位的合法意图，并复核回合、阶段、余额、产权和超时。客户端按序应用事件并比对状态哈希，不一致时自动获取快照。普通玩家掉线后可由 AI 托管，并可按原身份重新接管。
 
-## 发布与更新安全
+## 一键发布
 
-发布流水线需要以下 GitHub Repository Secrets：
+仓库根目录的 `publish_release.bat` 会检查环境，构建并运行 10,000 局测试，推送 `main` 到 GitHub/Gitee，创建版本标签并等待 GitHub Actions 生成安装包和双源 Release。
 
-- `GITEE_TOKEN`：仅授予目标 Gitee 仓库和 Release 所需最小权限。
-- `UPDATE_SIGNING_KEY`：Ed25519 私钥的 Base64 编码，仅供 CI 签署更新清单。
+```powershell
+# 只检查，不产生提交、标签或远端变更
+.\scripts\publish_release.ps1 -Version 0.2.0 -SkipTests -DryRun -Yes
 
-以及 Repository Variables `GITEE_REPOSITORY`、`PRIMARY_MANIFEST_URL`、`GITEE_MANIFEST_URL` 和 `UPDATE_PUBLIC_KEY_HEX`。`GITEE_REPOSITORY` 格式为 `owner/repository`。令牌和私钥不得写入源码、清单、客户端或聊天记录。
+# 发布当前已经写入 VERSION 的 v0.2.0
+.\publish_release.bat -Version 0.2.0
 
-配置 CMake 缓存项 `NEON_UPDATE_PUBLIC_KEY_HEX`、`NEON_GITHUB_MANIFEST_URL` 和 `NEON_GITEE_MANIFEST_URL` 后，生产启动器才会接受远程更新。清单 URL 指向各源的 `stable.json`；当玩家切换到测试通道时，启动器会自动请求同目录的 `beta.json`。未配置公钥时启动器采用失败关闭策略，只允许启动已安装版本。
+# 修复外部服务后重跑已有标签
+.\publish_release.bat -RetryTag v0.2.0
+```
 
-## 质量检查
+发布需要 GitHub Repository Secrets：
 
-默认测试覆盖地图内容、建筑/道路占地、世界锚点、命令幂等、买地升级、卡牌/技能/抵押、存档校验、协议帧限制和 AI 模拟。联机集成测试会真实建立本机 TCP 房间，验证座位授权、越权拒绝、快照序号与状态哈希。发布 CI 设置 `NEON_SIMULATION_GAMES=10000`，验证一万局不会死循环或产生负现金异常。
+- `UPDATE_SIGNING_KEY`：原有 Ed25519 私钥的 Base64，仅供 CI 签署清单。
+- `GITEE_TOKEN`：撤销曾在聊天或日志中暴露的令牌后创建的新最小权限令牌。
 
-项目源码使用 MIT 许可证。发布 Qt 动态库时须同时提供 Qt LGPL 许可证和对应 notices。
+并需要 Repository Variables：`GITEE_REPOSITORY`、`PRIMARY_MANIFEST_URL`、`GITEE_MANIFEST_URL` 和 `UPDATE_PUBLIC_KEY_HEX`。令牌和私钥不得写入代码、配置、客户端或聊天记录。GitHub Actions 账户存在 billing lock 时必须先解除，否则标签会推送但构建任务无法启动。
+
+更新清单强制校验 SHA-256 和 Ed25519 签名，最低启动器版本保持 `0.1.0`。GitHub 源失败时会切换到 Gitee；公钥未配置或签名无效时，启动器拒绝安装远程包，但仍允许启动已安装版本。
+
+## 许可
+
+项目源码使用 MIT 许可。Qt 以 LGPL 动态链接方式发布，安装包同时包含相应许可与 notices。历史人物介绍会明确区分史实与架空演绎，不使用伪造历史言论。

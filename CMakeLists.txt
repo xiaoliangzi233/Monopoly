@@ -18,10 +18,11 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 set(QT_QML_GENERATE_QMLLS_INI ON)
 
-option(NEON_BUILD_TESTS "Build Neon Tycoon tests" ON)
+option(NEON_BUILD_TESTS "Build Shengshi Baiye tests" ON)
 option(NEON_BUILD_LAUNCHER "Build the standalone launcher" ON)
 
 find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Network Qml Quick QuickControls2)
+find_package(Qt6 6.4 QUIET COMPONENTS Multimedia)
 
 qt_standard_project_setup()
 if(COMMAND qt_policy)
@@ -70,11 +71,21 @@ install(RUNTIME_DEPENDENCY_SET neon_runtime_dependencies
 )
 
 set(CPACK_PACKAGE_NAME "Neon Tycoon")
-set(CPACK_PACKAGE_VENDOR "Neon Tycoon Contributors")
+set(CPACK_PACKAGE_VENDOR "Shengshi Baiye Contributors")
 set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
 set(CPACK_PACKAGE_INSTALL_DIRECTORY "Neon Tycoon")
-set(CPACK_NSIS_DISPLAY_NAME "Neon Tycoon")
+set(CPACK_PACKAGE_FILE_NAME "ShengshiBaiye-${PROJECT_VERSION}-win64")
+set(CPACK_NSIS_DISPLAY_NAME "盛世百业")
 set(CPACK_NSIS_PACKAGE_NAME "Neon Tycoon")
 set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
-set(CPACK_NSIS_MUI_FINISHPAGE_RUN "bin/NeonTycoonLauncher.exe")
+set(CPACK_PACKAGE_EXECUTABLES "NeonTycoonLauncher" "盛世百业")
+set(CPACK_CREATE_DESKTOP_LINKS "NeonTycoonLauncher")
+set(CPACK_NSIS_INSTALLED_ICON_NAME "bin\\\\NeonTycoonLauncher.exe")
+set(CPACK_NSIS_MUI_FINISHPAGE_RUN "NeonTycoonLauncher.exe")
+set(CPACK_NSIS_EXTRA_INSTALL_COMMANDS "
+  CreateShortCut \\\"$DESKTOP\\\\盛世百业.lnk\\\" \\\"$INSTDIR\\\\bin\\\\NeonTycoonLauncher.exe\\\"
+")
+set(CPACK_NSIS_EXTRA_UNINSTALL_COMMANDS "
+  Delete \\\"$DESKTOP\\\\盛世百业.lnk\\\"
+")
 include(CPack)
