@@ -55,9 +55,15 @@ jobs:
           "version=${{ github.ref_name }}".Replace('version=v','version=') >> $env:GITHUB_OUTPUT
           if ('${{ github.ref_name }}' -match '-') { 'channel=beta' >> $env:GITHUB_OUTPUT } else { 'channel=stable' >> $env:GITHUB_OUTPUT }
       - name: Publish GitHub release
+        id: github_release
         shell: pwsh
         env: { GH_TOKEN: '${{ github.token }}' }
-        run: gh release create "${{ github.ref_name }}" "${{ steps.meta.outputs.asset }}" --generate-notes ${{ contains(github.ref_name, '-') && '--prerelease' || '' }}
+        run: |
+          gh release create "${{ github.ref_name }}" "${{ steps.meta.outputs.asset }}" --generate-notes ${{ contains(github.ref_name, '-') && '--prerelease' || '' }}
+          $release=(gh release view "${{ github.ref_name }}" --json assets | ConvertFrom-Json)
+          $downloadUrl=($release.assets | Select-Object -First 1).url
+          if (!$downloadUrl) { throw 'GitHub did not return a release asset URL' }
+          "download_url=$downloadUrl" >> $env:GITHUB_OUTPUT
       - name: Publish Gitee release
         id: gitee
         shell: pwsh
@@ -74,8 +80,7 @@ jobs:
         env:
           UPDATE_SIGNING_KEY: '${{ secrets.UPDATE_SIGNING_KEY }}'
         run: |
-          $githubUrl="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/${{ steps.meta.outputs.asset_name }}"
-          python scripts/sign_manifest.py --channel "${{ steps.meta.outputs.channel }}" --version "${{ steps.meta.outputs.version }}" --url $githubUrl --file "${{ steps.meta.outputs.asset }}" --output "manifests/github/${{ steps.meta.outputs.channel }}.json"
+          python scripts/sign_manifest.py --channel "${{ steps.meta.outputs.channel }}" --version "${{ steps.meta.outputs.version }}" --url "${{ steps.github_release.outputs.download_url }}" --file "${{ steps.meta.outputs.asset }}" --output "manifests/github/${{ steps.meta.outputs.channel }}.json"
           python scripts/sign_manifest.py --channel "${{ steps.meta.outputs.channel }}" --version "${{ steps.meta.outputs.version }}" --url "${{ steps.gitee.outputs.download_url }}" --file "${{ steps.meta.outputs.asset }}" --output "manifests/gitee/${{ steps.meta.outputs.channel }}.json"
       - name: Publish manifest branch and mirror tags
         shell: pwsh
