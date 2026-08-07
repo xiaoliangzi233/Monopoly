@@ -6,7 +6,7 @@
 
 namespace neon::net {
 
-constexpr quint32 ProtocolVersion = 1;
+constexpr quint32 ProtocolVersion = 2;
 constexpr quint16 DefaultPort = 29450;
 constexpr quint32 MaximumFrameSize = 4 * 1024 * 1024;
 

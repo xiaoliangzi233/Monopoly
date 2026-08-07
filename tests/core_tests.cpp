@@ -29,6 +29,7 @@ private slots:
     void characterCardsAndProsperityChangeState();
     void saveV2RoundTripPreservesHash();
     void protocolRejectsOversizedFrame();
+    void legacyClientReceivesUpgradeMessage();
     void hostAuthorizesSeatAndSynchronizesSnapshot();
     void aiSimulationAlwaysTerminates();
 };
@@ -209,6 +210,34 @@ void CoreTests::protocolRejectsOversizedFrame()
     QVERIFY(!net::takeFrame(buffer, &frame, &error));
     QVERIFY(!error.isEmpty());
     QVERIFY(buffer.isEmpty());
+}
+
+void CoreTests::legacyClientReceivesUpgradeMessage()
+{
+    GameEngine engine;
+    QVERIFY(engine.createGame({QStringLiteral("房主"), QStringLiteral("旧客户端")}, 0, 24, 51));
+    net::HostServer host(&engine);
+    QString error;
+    QVERIFY2(host.listen(0, &error), qPrintable(error));
+
+    QTcpSocket legacy;
+    legacy.connectToHost(QHostAddress::LocalHost, host.port());
+    QVERIFY(legacy.waitForConnected(2000));
+    const net::ProtocolEnvelope hello{1, net::MessageType::Hello, 9,
+        {{QStringLiteral("clientVersion"), QStringLiteral("0.1.0")}}};
+    legacy.write(net::framePayload(net::encodeEnvelope(hello)));
+    legacy.flush();
+    QTRY_VERIFY_WITH_TIMEOUT(legacy.bytesAvailable() > 0, 3000);
+
+    QByteArray buffer = legacy.readAll();
+    QByteArray frame;
+    QVERIFY(net::takeFrame(buffer, &frame, &error));
+    const auto response = QCborValue::fromCbor(frame).toMap();
+    QCOMPARE(response.value(QStringLiteral("version")).toInteger(), 1);
+    QCOMPARE(response.value(QStringLiteral("type")).toInteger(), qint64(net::MessageType::CommandRejected));
+    const auto payload = response.value(QStringLiteral("payload")).toMap();
+    QVERIFY(payload.value(QStringLiteral("reason")).toString().contains(QStringLiteral("协议 v2")));
+    QCOMPARE(payload.value(QStringLiteral("requiredProtocol")).toInteger(), qint64(2));
 }
 
 void CoreTests::hostAuthorizesSeatAndSynchronizesSnapshot()

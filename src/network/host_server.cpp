@@ -88,6 +88,13 @@ void HostServer::onReadyRead(QTcpSocket *socket)
     while (takeFrame(buffer, &frame, &error)) {
         ProtocolEnvelope envelope;
         if (!decodeEnvelope(frame, &envelope, &error)) {
+            if (error == QStringLiteral("Incompatible protocol version") && envelope.protocolVersion > 0) {
+                send(socket, {envelope.protocolVersion, MessageType::CommandRejected, envelope.requestId,
+                              {{QStringLiteral("reason"),
+                                QStringLiteral("客户端协议不兼容：本房间需要协议 v2，请先更新《盛世百业》")},
+                               {QStringLiteral("requiredProtocol"), qint64(ProtocolVersion)}}});
+                socket->flush();
+            }
             emit protocolError(error);
             socket->disconnectFromHost();
             return;
