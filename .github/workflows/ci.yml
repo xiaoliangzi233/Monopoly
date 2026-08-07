@@ -19,7 +19,7 @@ jobs:
       - uses: seanmiddleditch/gha-setup-ninja@v5
       - name: Install libsodium
         shell: pwsh
-        run: vcpkg install libsodium:x64-windows
+        run: vcpkg install --triplet x64-windows
       - name: Configure
         shell: pwsh
         run: >-

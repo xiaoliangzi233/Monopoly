@@ -23,7 +23,8 @@ jobs:
         shell: pwsh
         run: |
           choco install nsis -y --no-progress
-          vcpkg install libsodium:x64-windows
+          'C:\Program Files (x86)\NSIS' >> $env:GITHUB_PATH
+          vcpkg install --triplet x64-windows
           python -m pip install pynacl requests
       - name: Configure production build
         shell: pwsh
