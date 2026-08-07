@@ -17,6 +17,20 @@ HostServer::HostServer(GameEngine *engine, QObject *parent) : QObject(parent), m
     connect(&m_server, &QTcpServer::newConnection, this, &HostServer::onNewConnection);
 }
 
+HostServer::~HostServer()
+{
+    // QTcpServer owns accepted sockets. Disconnect callbacks while the seat maps
+    // are still alive so socket destruction cannot re-enter an already-destroyed
+    // HostServer member during C++ reverse member teardown.
+    for (auto *socket : m_buffers.keys()) {
+        socket->disconnect(this);
+        socket->abort();
+    }
+    m_playerAssignments.clear();
+    m_buffers.clear();
+    m_server.close();
+}
+
 bool HostServer::listen(quint16 port, QString *error)
 {
     if (!m_engine) {

@@ -14,6 +14,7 @@ class HostServer final : public QObject {
     Q_OBJECT
 public:
     explicit HostServer(GameEngine *engine, QObject *parent = nullptr);
+    ~HostServer() override;
     bool listen(quint16 port = DefaultPort, QString *error = nullptr);
     void close();
     [[nodiscard]] bool isListening() const { return m_server.isListening(); }
