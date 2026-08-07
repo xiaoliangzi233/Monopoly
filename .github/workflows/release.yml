@@ -95,7 +95,7 @@ jobs:
           git push gitee "HEAD:refs/heads/${{ github.event.repository.default_branch }}"
           git push gitee "${{ github.ref_name }}"
           git fetch origin update-manifests 2>$null
-          if ($LASTEXITCODE -eq 0) { git switch update-manifests } else { git switch --orphan update-manifests; git rm -rf . }
+          if ($LASTEXITCODE -eq 0) { git switch update-manifests } else { git switch --orphan update-manifests; git rm -rf --ignore-unmatch . }
           New-Item -ItemType Directory -Force updates/github,updates/gitee | Out-Null
           Copy-Item "manifests/github/${{ steps.meta.outputs.channel }}.json" "updates/github/${{ steps.meta.outputs.channel }}.json"
           Copy-Item "manifests/gitee/${{ steps.meta.outputs.channel }}.json" "updates/gitee/${{ steps.meta.outputs.channel }}.json"
