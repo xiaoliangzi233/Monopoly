@@ -42,11 +42,17 @@ class GameViewModel final : public QObject {
     Q_PROPERTY(bool canBidAuction READ canBidAuction NOTIFY stateChanged)
     Q_PROPERTY(bool tradePending READ tradePending NOTIFY stateChanged)
     Q_PROPERTY(bool aiThinking READ aiThinking NOTIFY stateChanged)
+    Q_PROPERTY(bool presentationBusy READ presentationBusy NOTIFY stateChanged)
+    Q_PROPERTY(bool diceAnimating READ diceAnimating NOTIFY stateChanged)
+    Q_PROPERTY(int diceValue READ diceValue NOTIFY stateChanged)
+    Q_PROPERTY(QString thinkingText READ thinkingText NOTIFY stateChanged)
+    Q_PROPERTY(bool routeSelectionVisible READ routeSelectionVisible NOTIFY stateChanged)
     Q_PROPERTY(int auctionBid READ auctionBid NOTIFY stateChanged)
     Q_PROPERTY(int auctionSeconds READ auctionSeconds NOTIFY countdownChanged)
     Q_PROPERTY(QString auctionTileName READ auctionTileName NOTIFY stateChanged)
     Q_PROPERTY(QVariantList routeOptions READ routeOptions NOTIFY stateChanged)
     Q_PROPERTY(QVariantList players READ players NOTIFY stateChanged)
+    Q_PROPERTY(QVariantList characters READ characters CONSTANT)
     Q_PROPERTY(QStringList eventLog READ eventLog NOTIFY stateChanged)
 
 public:
@@ -80,14 +86,21 @@ public:
     bool canBidAuction() const;
     bool tradePending() const { return m_engine.state().phase == GamePhase::Trade; }
     bool aiThinking() const;
+    bool presentationBusy() const { return m_diceAnimating || m_engine.state().phase == GamePhase::Moving; }
+    bool diceAnimating() const { return m_diceAnimating; }
+    int diceValue() const { return m_diceValue; }
+    QString thinkingText() const;
+    bool routeSelectionVisible() const;
     int auctionBid() const { return m_engine.state().auctionHighBid; }
     int auctionSeconds() const;
     QString auctionTileName() const;
     QVariantList routeOptions() const;
     QVariantList players() const;
+    QVariantList characters() const;
     QStringList eventLog() const;
 
-    Q_INVOKABLE void newGame(int totalPlayers = 4, int aiPlayers = 3, int rounds = 32);
+    Q_INVOKABLE void newGame(int totalPlayers = 4, int aiPlayers = 3, int rounds = 120,
+                             int characterIndex = 0);
     Q_INVOKABLE void rollDice();
     Q_INVOKABLE void rerollDice();
     Q_INVOKABLE void chooseRoute(int option);
@@ -104,7 +117,8 @@ public:
     Q_INVOKABLE void respondTrade(bool accept);
     Q_INVOKABLE bool saveGame();
     Q_INVOKABLE bool loadGame();
-    Q_INVOKABLE void hostGame(int totalPlayers = 4, int aiPlayers = 2, quint16 port = net::DefaultPort);
+    Q_INVOKABLE void hostGame(int totalPlayers = 4, int aiPlayers = 2, int rounds = 120,
+                              int characterIndex = 0, quint16 port = net::DefaultPort);
     Q_INVOKABLE void joinGame(const QString &address, quint16 port = net::DefaultPort);
     Q_INVOKABLE QString tileDescription(int index) const;
 
@@ -119,6 +133,9 @@ private:
     void submit(CommandType type, const QVariantMap &arguments = {});
     void submitAs(const QUuid &playerId, CommandType type, const QVariantMap &arguments = {});
     void handleAcceptedState(int previousCurrent, int previousPosition);
+    void observePresentationState(int previousCurrent, int previousPosition);
+    void finishDicePresentation();
+    void advanceMovementPresentation();
     void scheduleAi();
     void runAiStep();
     void tickTimedPhase();
@@ -132,6 +149,8 @@ private:
     AiPlayer m_ai{AiPlayer::Difficulty::Standard};
     QTimer m_aiTimer;
     QTimer m_phaseTimer;
+    QTimer m_diceTimer;
+    QTimer m_movementTimer;
     quint64 m_nextCommandId = 0;
     QString m_networkStatus = QStringLiteral("本地模式");
     std::unique_ptr<net::HostServer> m_host;
@@ -139,6 +158,11 @@ private:
     net::LanDiscovery m_discovery;
     bool m_clientMode = false;
     QUuid m_localPlayerId;
+    bool m_diceAnimating = false;
+    int m_diceValue = 1;
+    int m_observedDice = 0;
+    quint64 m_observedRollSequence = 0;
+    quint64 m_observedMovementSerial = 0;
 };
 
 } // namespace neon

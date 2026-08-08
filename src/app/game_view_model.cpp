@@ -4,6 +4,7 @@
 
 #include <QDateTime>
 #include <QDir>
+#include <QRandomGenerator>
 #include <algorithm>
 
 namespace neon {
@@ -11,8 +12,14 @@ namespace neon {
 GameViewModel::GameViewModel(QObject *parent) : QObject(parent)
 {
     m_aiTimer.setSingleShot(true);
-    m_aiTimer.setInterval(260);
+    m_aiTimer.setInterval(900);
     connect(&m_aiTimer, &QTimer::timeout, this, &GameViewModel::runAiStep);
+    m_diceTimer.setSingleShot(true);
+    m_diceTimer.setInterval(900);
+    connect(&m_diceTimer, &QTimer::timeout, this, &GameViewModel::finishDicePresentation);
+    m_movementTimer.setSingleShot(true);
+    m_movementTimer.setInterval(280);
+    connect(&m_movementTimer, &QTimer::timeout, this, &GameViewModel::advanceMovementPresentation);
     m_phaseTimer.setInterval(250);
     connect(&m_phaseTimer, &QTimer::timeout, this, &GameViewModel::tickTimedPhase);
     m_phaseTimer.start();
@@ -28,9 +35,7 @@ GameViewModel::GameViewModel(QObject *parent) : QObject(parent)
         m_engine.restore(m_client.state());
         if (!m_client.assignedPlayerId().isNull()) m_localPlayerId = m_client.assignedPlayerId();
         setNetworkStatus(QStringLiteral("联机同步正常"));
-        emit stateChanged();
-        if (previousCurrent != m_engine.state().currentPlayer || previousPosition != currentPosition())
-            emit cameraFocusRequested(currentPosition());
+        observePresentationState(previousCurrent, previousPosition);
     });
     newGame();
 }
@@ -80,14 +85,14 @@ QString GameViewModel::tileName() const
 QString GameViewModel::statusText() const
 {
     switch (m_engine.state().phase) {
-    case GamePhase::AwaitingRoll: return QStringLiteral("等待投掷行筹");
+    case GamePhase::AwaitingRoll: return QStringLiteral("等待投掷骰子");
     case GamePhase::AwaitingRoute: return QStringLiteral("选择本回合路线");
     case GamePhase::Moving: return QStringLiteral("正在行进");
     case GamePhase::AwaitingDecision: return QStringLiteral("经营决策");
-    case GamePhase::Auction: return QStringLiteral("百业竞价");
-    case GamePhase::Trade: return QStringLiteral("商议交易");
-    case GamePhase::ForcedSettlement: return QStringLiteral("筹措银两");
-    case GamePhase::Finished: return QStringLiteral("盛世评定完成");
+    case GamePhase::Auction: return QStringLiteral("公开竞价");
+    case GamePhase::Trade: return QStringLiteral("产业交易");
+    case GamePhase::ForcedSettlement: return QStringLiteral("资产处置");
+    case GamePhase::Finished: return QStringLiteral("城市经营结算完成");
     case GamePhase::Waiting: return QStringLiteral("等待玩家");
     }
     return QStringLiteral("城市运行中");
@@ -180,6 +185,24 @@ bool GameViewModel::aiThinking() const
     return p && p->aiControlled;
 }
 
+QString GameViewModel::thinkingText() const
+{
+    const auto *player = m_engine.state().activePlayer();
+    if (!player) return QStringLiteral("正在同步城市状态…");
+    if (m_engine.state().phase == GamePhase::Moving)
+        return QStringLiteral("%1 正在前往下一站…").arg(player->name);
+    if (m_diceAnimating) return QStringLiteral("%1 正在投掷骰子…").arg(player->name);
+    if (player->aiControlled) return QStringLiteral("%1 正在思考…").arg(player->name);
+    if (!localCanControlActivePlayer()) return QStringLiteral("等待 %1 操作…").arg(player->name);
+    return QStringLiteral("轮到你了 · 选择下方可用操作");
+}
+
+bool GameViewModel::routeSelectionVisible() const
+{
+    return !m_diceAnimating && localCanControlActivePlayer()
+        && m_engine.state().phase == GamePhase::AwaitingRoute;
+}
+
 int GameViewModel::auctionSeconds() const
 {
     if (m_engine.state().phase != GamePhase::Auction) return 0;
@@ -220,27 +243,59 @@ QVariantList GameViewModel::players() const
     return result;
 }
 
-QStringList GameViewModel::eventLog() const
+QVariantList GameViewModel::characters() const
 {
-    QStringList result;
-    const auto &log = m_engine.state().eventLog;
-    for (int i = qMax(0, log.size() - 20); i < log.size(); ++i)
-        result.prepend(QStringLiteral("第%1记 · %2").arg(log.at(i).sequence).arg(log.at(i).type));
+    QVariantList result;
+    const auto names = CityContent::characterNames();
+    const auto bios = CityContent::characterBiographies();
+    for (int i = 0; i < names.size(); ++i)
+        result.append(QVariantMap{{QStringLiteral("index"), i}, {QStringLiteral("name"), names.at(i)},
+            {QStringLiteral("bio"), bios.value(i)}});
     return result;
 }
 
-void GameViewModel::newGame(int totalPlayers, int aiPlayers, int rounds)
+QStringList GameViewModel::eventLog() const
+{
+    static const QHash<QString, QString> labels = {
+        {QStringLiteral("rolled"), QStringLiteral("投掷骰子")},
+        {QStringLiteral("movementStarted"), QStringLiteral("开始移动")},
+        {QStringLiteral("movementStep"), QStringLiteral("到达下一站")},
+        {QStringLiteral("movementCompleted"), QStringLiteral("移动完成")},
+        {QStringLiteral("propertyBought"), QStringLiteral("购买产业")},
+        {QStringLiteral("propertyUpgraded"), QStringLiteral("升级产业")},
+        {QStringLiteral("auctionStarted"), QStringLiteral("公开竞价开始")},
+        {QStringLiteral("tradeProposed"), QStringLiteral("发起产业交易")},
+        {QStringLiteral("cityPulse"), QStringLiteral("城市脉冲")},
+        {QStringLiteral("turnStarted"), QStringLiteral("新回合开始")},
+        {QStringLiteral("gameFinished"), QStringLiteral("对局结算")}
+    };
+    QStringList result;
+    const auto &log = m_engine.state().eventLog;
+    for (int i = qMax(0, log.size() - 20); i < log.size(); ++i)
+        result.prepend(QStringLiteral("记录 %1 · %2").arg(log.at(i).sequence)
+                           .arg(labels.value(log.at(i).type, QStringLiteral("城市状态更新"))));
+    return result;
+}
+
+void GameViewModel::newGame(int totalPlayers, int aiPlayers, int rounds, int characterIndex)
 {
     if (m_host) { m_host->close(); m_host.reset(); }
     if (m_clientMode) m_client.disconnectFromHost();
     totalPlayers = qBound(2, totalPlayers, 6);
     aiPlayers = qBound(0, aiPlayers, totalPlayers - 1);
+    QStringList names = CityContent::characterNames();
+    characterIndex = qBound(0, characterIndex, names.size() - 1);
+    names.move(characterIndex, 0);
     QString error;
-    if (!m_engine.createGame(CityContent::characterNames().mid(0, totalPlayers), aiPlayers, rounds, 0, &error)) {
+    if (!m_engine.createGame(names.mid(0, totalPlayers), aiPlayers, rounds, 0, &error)) {
         emit toastRequested(error); return;
     }
     m_clientMode = false;
     m_localPlayerId = m_engine.state().players.first().id;
+    m_diceAnimating = false;
+    m_observedDice = 0;
+    m_observedRollSequence = 0;
+    m_observedMovementSerial = 0;
     setNetworkStatus(QStringLiteral("本地模式"));
     emit stateChanged();
     emit cameraFocusRequested(0);
@@ -269,10 +324,55 @@ void GameViewModel::handleAcceptedState(int previousCurrent, int previousPositio
 {
     autoSave();
     if (m_host) m_host->publishState();
+    observePresentationState(previousCurrent, previousPosition);
+    scheduleAi();
+}
+
+void GameViewModel::observePresentationState(int previousCurrent, int previousPosition)
+{
+    quint64 newestRoll = 0;
+    const auto &events = m_engine.state().eventLog;
+    for (auto it = events.crbegin(); it != events.crend(); ++it) {
+        if (it->type == QStringLiteral("rolled")) { newestRoll = it->sequence; break; }
+    }
+    if (newestRoll > m_observedRollSequence) {
+        m_observedRollSequence = newestRoll;
+        m_observedDice = m_engine.state().lastDice;
+        m_diceValue = qBound(1, m_observedDice, 6);
+        m_diceAnimating = true;
+        m_diceTimer.start();
+    }
+    const bool movementJustStarted = m_engine.state().movementSerial != m_observedMovementSerial;
+    if (movementJustStarted) {
+        m_observedMovementSerial = m_engine.state().movementSerial;
+        emit cameraFocusRequested(currentPosition());
+    }
     emit stateChanged();
     if (previousCurrent != m_engine.state().currentPlayer || previousPosition != currentPosition())
         emit cameraFocusRequested(currentPosition());
-    scheduleAi();
+    if (!m_clientMode && m_engine.state().phase == GamePhase::Moving
+        && !m_diceAnimating && !m_movementTimer.isActive())
+        m_movementTimer.start(movementJustStarted ? 450 : 280);
+}
+
+void GameViewModel::finishDicePresentation()
+{
+    m_diceAnimating = false;
+    emit stateChanged();
+    if (!m_clientMode && m_engine.state().phase == GamePhase::Moving)
+        m_movementTimer.start(450);
+    else scheduleAi();
+}
+
+void GameViewModel::advanceMovementPresentation()
+{
+    if (m_clientMode || m_engine.state().phase != GamePhase::Moving) return;
+    const int previousCurrent = m_engine.state().currentPlayer;
+    const int previousPosition = currentPosition();
+    const auto result = m_engine.advanceMovementStep();
+    if (!result.accepted) { emit toastRequested(result.error); return; }
+    handleAcceptedState(previousCurrent, previousPosition);
+    if (m_engine.state().phase == GamePhase::Moving) m_movementTimer.start(280);
 }
 
 void GameViewModel::rollDice() { submit(CommandType::Roll); }
@@ -309,12 +409,15 @@ void GameViewModel::respondTrade(bool accept)
 
 void GameViewModel::scheduleAi()
 {
-    if (!m_clientMode && aiThinking() && m_engine.state().phase != GamePhase::Finished) m_aiTimer.start();
+    if (!m_clientMode && !m_diceAnimating && m_engine.state().phase != GamePhase::Moving
+        && aiThinking() && m_engine.state().phase != GamePhase::Finished) {
+        m_aiTimer.start(int(QRandomGenerator::global()->bounded(700, 1301)));
+    }
 }
 
 void GameViewModel::runAiStep()
 {
-    if (!aiThinking()) return;
+    if (m_diceAnimating || m_engine.state().phase == GamePhase::Moving || !aiThinking()) return;
     const auto command = m_ai.chooseCommand(m_engine.state(), ++m_nextCommandId);
     if (command.playerId.isNull()) return;
     const int previousCurrent = m_engine.state().currentPlayer;
@@ -361,20 +464,29 @@ bool GameViewModel::loadGame()
     m_engine.restore(std::move(state));
     m_clientMode = false;
     m_localPlayerId = m_engine.state().players.isEmpty() ? QUuid{} : m_engine.state().players.first().id;
+    m_diceAnimating = false;
+    m_observedDice = m_engine.state().lastDice;
+    m_observedMovementSerial = m_engine.state().movementSerial;
+    m_observedRollSequence = 0;
+    for (auto it = m_engine.state().eventLog.crbegin(); it != m_engine.state().eventLog.crend(); ++it)
+        if (it->type == QStringLiteral("rolled")) { m_observedRollSequence = it->sequence; break; }
     emit stateChanged(); emit cameraFocusRequested(currentPosition());
+    if (m_engine.state().phase == GamePhase::Moving) m_movementTimer.start(450);
     emit toastRequested(QStringLiteral("对局已恢复"));
     scheduleAi();
     return true;
 }
 
-void GameViewModel::hostGame(int totalPlayers, int aiPlayers, quint16 port)
+void GameViewModel::hostGame(int totalPlayers, int aiPlayers, int rounds, int characterIndex, quint16 port)
 {
     totalPlayers = qBound(2, totalPlayers, 6);
     aiPlayers = qBound(0, aiPlayers, totalPlayers - 2);
-    newGame(totalPlayers, aiPlayers, 32);
+    newGame(totalPlayers, aiPlayers, rounds, characterIndex);
     m_host = std::make_unique<net::HostServer>(&m_engine, this);
     connect(m_host.get(), &net::HostServer::authoritativeStateChanged, this, [this] {
-        autoSave(); emit stateChanged(); scheduleAi();
+        const int previousCurrent = m_engine.state().currentPlayer;
+        const int previousPosition = currentPosition();
+        autoSave(); observePresentationState(previousCurrent, previousPosition); scheduleAi();
     });
     connect(m_host.get(), &net::HostServer::playerSeatConnected, this, [this](const QUuid &) {
         emit toastRequested(QStringLiteral("远程玩家已入席")); m_host->publishState();
@@ -408,9 +520,9 @@ QString GameViewModel::tileDescription(int index) const
     QString result = tile->name;
     if (tile->type == TileType::Property) {
         const auto *property = m_engine.state().propertyAt(index);
-        result += QStringLiteral("\n置办 %1两 · 基础商机 %2两").arg(tile->price).arg(tile->baseRent);
+        result += QStringLiteral("\n购入 %1 · 基础收益 %2").arg(tile->price).arg(tile->baseRent);
         if (property && !property->ownerId.isNull())
-            result += QStringLiteral("\n产业等级 %1%2").arg(property->level).arg(property->mortgaged ? QStringLiteral(" · 已典当") : QString());
+            result += QStringLiteral("\n产业等级 %1%2").arg(property->level).arg(property->mortgaged ? QStringLiteral(" · 已抵押") : QString());
     }
     return result;
 }
