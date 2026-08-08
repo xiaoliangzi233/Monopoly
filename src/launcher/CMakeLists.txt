@@ -13,6 +13,9 @@ qt_add_executable(neon_launcher WIN32
     update_controller.h
     update_controller.cpp
 )
+if(NEON_CONSOLE_DIAGNOSTICS)
+    set_target_properties(neon_launcher PROPERTIES WIN32_EXECUTABLE FALSE)
+endif()
 
 qt_add_qml_module(neon_launcher
     URI NeonTycoonLauncher

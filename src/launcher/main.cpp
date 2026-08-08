@@ -18,6 +18,7 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty(QStringLiteral("updater"), &updater);
     engine.loadFromModule("NeonTycoonLauncher", "Launcher");
     if (engine.rootObjects().isEmpty()) return -1;
+    if (!smokeTest) QTimer::singleShot(0, &updater, [&updater] { updater.checkForUpdates(QStringLiteral("stable")); });
     if (smokeTest) QTimer::singleShot(1200, &app, &QCoreApplication::quit);
     return app.exec();
 }

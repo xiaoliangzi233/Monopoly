@@ -4,17 +4,28 @@ qt_add_executable(neon_tycoon WIN32
     game_view_model.cpp
     procedural_audio.h
     procedural_audio.cpp
+    release_notes.h
+    release_notes.cpp
     top_down_city_view.h
     top_down_city_view.cpp
 )
+
+option(NEON_CONSOLE_DIAGNOSTICS "Build the game as a console executable for local QML diagnostics" OFF)
+if(NEON_CONSOLE_DIAGNOSTICS)
+    set_target_properties(neon_tycoon PROPERTIES WIN32_EXECUTABLE FALSE)
+endif()
 
 qt_add_qml_module(neon_tycoon
     URI NeonTycoon
     VERSION 1.0
     QML_FILES
         qml/Main.qml
-        qml/HudPanel.qml
-        qml/GlassButton.qml
+        qml/ModernButton.qml
+        qml/ModernModal.qml
+        qml/ModernStepper.qml
+        qml/SegmentedChoice.qml
+    RESOURCES
+        resources/release_notes.json
 )
 
 target_include_directories(neon_tycoon PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
