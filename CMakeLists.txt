@@ -78,14 +78,16 @@ set(CPACK_PACKAGE_FILE_NAME "ShengshiBaiye-${PROJECT_VERSION}-win64")
 set(CPACK_NSIS_DISPLAY_NAME "盛世百业")
 set(CPACK_NSIS_PACKAGE_NAME "Neon Tycoon")
 set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
-set(CPACK_PACKAGE_EXECUTABLES "NeonTycoonLauncher" "盛世百业")
-set(CPACK_CREATE_DESKTOP_LINKS "NeonTycoonLauncher")
 set(CPACK_NSIS_INSTALLED_ICON_NAME "bin\\\\NeonTycoonLauncher.exe")
 set(CPACK_NSIS_MUI_FINISHPAGE_RUN "NeonTycoonLauncher.exe")
 set(CPACK_NSIS_EXTRA_INSTALL_COMMANDS "
+  CreateDirectory \\\"$SMPROGRAMS\\\\盛世百业\\\"
+  CreateShortCut \\\"$SMPROGRAMS\\\\盛世百业\\\\盛世百业.lnk\\\" \\\"$INSTDIR\\\\bin\\\\NeonTycoonLauncher.exe\\\"
   CreateShortCut \\\"$DESKTOP\\\\盛世百业.lnk\\\" \\\"$INSTDIR\\\\bin\\\\NeonTycoonLauncher.exe\\\"
 ")
 set(CPACK_NSIS_EXTRA_UNINSTALL_COMMANDS "
   Delete \\\"$DESKTOP\\\\盛世百业.lnk\\\"
+  Delete \\\"$SMPROGRAMS\\\\盛世百业\\\\盛世百业.lnk\\\"
+  RMDir \\\"$SMPROGRAMS\\\\盛世百业\\\"
 ")
 include(CPack)
