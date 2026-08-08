@@ -10,16 +10,20 @@ class GameState final {
 public:
     QUuid matchId;
     quint32 rulesVersion = 2;
-    quint32 contentVersion = 2;
+    quint32 contentVersion = 3;
     QByteArray contentHash;
     quint64 sequence = 0;
     quint64 randomSeed = 0;
     int round = 1;
-    int maxRounds = 24;
+    int maxRounds = 120;
     int currentPlayer = 0;
     int lastDice = 0;
     int pendingDice = 0;
     QList<QList<int>> routeOptions;
+    QUuid movingPlayerId;
+    QList<int> pendingMovePath;
+    int pendingMoveIndex = 0;
+    quint64 movementSerial = 0;
     int activePulse = -1;
     int rentModifierPercent = 100;
     int buildingCostPercent = 100;

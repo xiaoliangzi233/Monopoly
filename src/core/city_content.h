@@ -9,7 +9,7 @@ namespace neon {
 
 class CityContent final {
 public:
-    static constexpr quint32 ContentVersion = 2;
+    static constexpr quint32 ContentVersion = 3;
     static QList<TileDefinition> createProsperousCityMap();
     static QByteArray contentHash();
     static QStringList characterNames();
@@ -19,6 +19,7 @@ public:
     static QStringList strategyCards();
     static QStringList personalEvents();
     static QStringList missions();
+    static QStringList landmarkNames();
 };
 
 } // namespace neon

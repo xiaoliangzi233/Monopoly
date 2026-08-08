@@ -100,7 +100,7 @@ struct PlayerState {
     int characterIndex = 0;
     int position = 0;
     int previousPosition = -1;
-    int cash = 18000;
+    int cash = 24000;
     int reputation = 0;
     int culture = 0;
     int livelihood = 0;

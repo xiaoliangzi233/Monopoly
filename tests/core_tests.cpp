@@ -19,11 +19,12 @@ using namespace neon;
 class CoreTests final : public QObject {
     Q_OBJECT
 private slots:
-    void mapHasExpectedNationalContent();
+    void mapHasExpectedModernContent();
     void mapGraphIsConnectedAndSymmetric();
     void sceneLayoutReservesRoadsAndIndustries();
     void rejectsDuplicateCommands();
     void routeChoiceIsHostAuthoritative();
+    void movementSnapshotResumesWithoutDuplicateSettlement();
     void canBuyUpgradeAndPawnIndustry();
     void auctionAndTradeValidateAssets();
     void characterCardsAndProsperityChangeState();
@@ -34,14 +35,15 @@ private slots:
     void aiSimulationAlwaysTerminates();
 };
 
-void CoreTests::mapHasExpectedNationalContent()
+void CoreTests::mapHasExpectedModernContent()
 {
     const auto tiles = CityContent::createProsperousCityMap();
     QCOMPARE(tiles.size(), 64);
     QCOMPARE(std::count_if(tiles.cbegin(), tiles.cend(), [](const auto &t) { return t.type == TileType::Property; }), 32);
     QCOMPARE(CityContent::districtNames().size(), 8);
-    QCOMPARE(CityContent::characterNames(), QStringList({QStringLiteral("鲁班"), QStringLiteral("黄道婆"),
-        QStringLiteral("李时珍"), QStringLiteral("沈括"), QStringLiteral("李清照"), QStringLiteral("郑和")}));
+    QCOMPARE(CityContent::characterNames(), QStringList({QStringLiteral("程砚"), QStringLiteral("唐织"),
+        QStringLiteral("夏岚"), QStringLiteral("周衡"), QStringLiteral("许知意"), QStringLiteral("陆远航")}));
+    QCOMPARE(CityContent::landmarkNames().size(), 8);
     QCOMPARE(CityContent::strategyCards().size(), 48);
     QCOMPARE(CityContent::personalEvents().size(), 36);
     QCOMPARE(CityContent::missions().size(), 24);
@@ -81,7 +83,7 @@ void CoreTests::sceneLayoutReservesRoadsAndIndustries()
 void CoreTests::rejectsDuplicateCommands()
 {
     GameEngine engine;
-    QVERIFY(engine.createGame({QStringLiteral("A"), QStringLiteral("B")}, 0, 24, 42));
+    QVERIFY(engine.createGame({QStringLiteral("A"), QStringLiteral("B")}, 0, 90, 42));
     const auto player = engine.state().activePlayer()->id;
     const GameCommand roll{engine.state().matchId, player, 1, CommandType::Roll, {}};
     QVERIFY(engine.apply(roll).accepted);
@@ -93,7 +95,7 @@ void CoreTests::rejectsDuplicateCommands()
 void CoreTests::routeChoiceIsHostAuthoritative()
 {
     GameEngine engine;
-    QVERIFY(engine.createGame({QStringLiteral("A"), QStringLiteral("B")}, 0, 24, 7));
+    QVERIFY(engine.createGame({QStringLiteral("A"), QStringLiteral("B")}, 0, 90, 7));
     GameState state = engine.state();
     state.players[0].position = 3;
     state.players[0].previousPosition = 2;
@@ -106,15 +108,54 @@ void CoreTests::routeChoiceIsHostAuthoritative()
         const auto chosen = engine.state().routeOptions.last();
         QVERIFY(engine.apply({engine.state().matchId, player, 2, CommandType::ChooseRoute,
                               {{QStringLiteral("option"), engine.state().routeOptions.size() - 1}}}).accepted);
+        QCOMPARE(engine.state().phase, GamePhase::Moving);
+        QCOMPARE(engine.state().players[0].position, 3);
+        while (engine.state().phase == GamePhase::Moving)
+            QVERIFY(engine.advanceMovementStep().accepted);
         QCOMPARE(engine.state().players[0].position, chosen.last());
     }
+    while (engine.state().phase == GamePhase::Moving)
+        QVERIFY(engine.advanceMovementStep().accepted);
     QCOMPARE(engine.state().phase, GamePhase::AwaitingDecision);
+}
+
+void CoreTests::movementSnapshotResumesWithoutDuplicateSettlement()
+{
+    GameEngine engine;
+    QVERIFY(engine.createGame({QStringLiteral("程砚"), QStringLiteral("唐织")}, 0, 120, 7));
+    GameState state = engine.state();
+    state.players[0].position = 3;
+    state.players[0].previousPosition = 2;
+    engine.restore(state);
+    const QUuid player = engine.state().activePlayer()->id;
+    QVERIFY(engine.apply({engine.state().matchId, player, 1, CommandType::Roll, {}}).accepted);
+    if (engine.state().phase == GamePhase::AwaitingRoute)
+        QVERIFY(engine.apply({engine.state().matchId, player, 2, CommandType::ChooseRoute,
+                              {{QStringLiteral("option"), 0}}}).accepted);
+    QCOMPARE(engine.state().phase, GamePhase::Moving);
+    QVERIFY(engine.advanceMovementStep().accepted);
+
+    QString error;
+    const GameState snapshot = GameState::fromCbor(engine.state().toCbor(true), &error);
+    QVERIFY2(error.isEmpty(), qPrintable(error));
+    QCOMPARE(snapshot.stableHash(), engine.state().stableHash());
+    QCOMPARE(snapshot.pendingMoveIndex, engine.state().pendingMoveIndex);
+    QCOMPARE(snapshot.pendingMovePath, engine.state().pendingMovePath);
+
+    GameEngine resumed;
+    resumed.restore(snapshot);
+    while (resumed.state().phase == GamePhase::Moving)
+        QVERIFY(resumed.advanceMovementStep().accepted);
+    QCOMPARE(std::count_if(resumed.state().eventLog.cbegin(), resumed.state().eventLog.cend(),
+        [](const GameEvent &event) { return event.type == QStringLiteral("movementCompleted"); }), 1);
+    QVERIFY(resumed.state().pendingMovePath.isEmpty());
+    QVERIFY(resumed.state().movingPlayerId.isNull());
 }
 
 void CoreTests::canBuyUpgradeAndPawnIndustry()
 {
     GameEngine engine;
-    QVERIFY(engine.createGame({QStringLiteral("A"), QStringLiteral("B")}, 0, 24, 99));
+    QVERIFY(engine.createGame({QStringLiteral("A"), QStringLiteral("B")}, 0, 90, 99));
     GameState state = engine.state();
     state.players[0].position = 1;
     state.phase = GamePhase::AwaitingDecision;
@@ -135,7 +176,7 @@ void CoreTests::canBuyUpgradeAndPawnIndustry()
 void CoreTests::auctionAndTradeValidateAssets()
 {
     GameEngine engine;
-    QVERIFY(engine.createGame({QStringLiteral("A"), QStringLiteral("B")}, 0, 24, 123));
+    QVERIFY(engine.createGame({QStringLiteral("A"), QStringLiteral("B")}, 0, 90, 123));
     GameState state = engine.state();
     state.players[0].position = 1;
     state.phase = GamePhase::AwaitingDecision;
@@ -168,7 +209,7 @@ void CoreTests::auctionAndTradeValidateAssets()
 void CoreTests::characterCardsAndProsperityChangeState()
 {
     GameEngine engine;
-    QVERIFY(engine.createGame(CityContent::characterNames(), 0, 24, 2026));
+    QVERIFY(engine.createGame(CityContent::characterNames(), 0, 90, 2026));
     GameState state = engine.state();
     state.players[0].strategyCards = {2};
     engine.restore(state);
@@ -185,7 +226,7 @@ void CoreTests::characterCardsAndProsperityChangeState()
 void CoreTests::saveV2RoundTripPreservesHash()
 {
     GameEngine engine;
-    QVERIFY(engine.createGame({QStringLiteral("A"), QStringLiteral("B")}, 1, 32, 1234));
+    QVERIFY(engine.createGame({QStringLiteral("A"), QStringLiteral("B")}, 1, 120, 1234));
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
     const QString path = directory.filePath(QStringLiteral("roundtrip.ntsave"));
@@ -215,7 +256,7 @@ void CoreTests::protocolRejectsOversizedFrame()
 void CoreTests::legacyClientReceivesUpgradeMessage()
 {
     GameEngine engine;
-    QVERIFY(engine.createGame({QStringLiteral("房主"), QStringLiteral("旧客户端")}, 0, 24, 51));
+    QVERIFY(engine.createGame({QStringLiteral("房主"), QStringLiteral("旧客户端")}, 0, 90, 51));
     net::HostServer host(&engine);
     QString error;
     QVERIFY2(host.listen(0, &error), qPrintable(error));
@@ -243,7 +284,7 @@ void CoreTests::legacyClientReceivesUpgradeMessage()
 void CoreTests::hostAuthorizesSeatAndSynchronizesSnapshot()
 {
     GameEngine engine;
-    QVERIFY(engine.createGame({QStringLiteral("房主"), QStringLiteral("来客")}, 0, 24, 29450));
+    QVERIFY(engine.createGame({QStringLiteral("房主"), QStringLiteral("来客")}, 0, 90, 29450));
     net::HostServer host(&engine);
     QString error;
     QVERIFY2(host.listen(0, &error), qPrintable(error));
@@ -268,14 +309,19 @@ void CoreTests::aiSimulationAlwaysTerminates()
     const int requested = qEnvironmentVariableIntValue("NEON_SIMULATION_GAMES", &ok);
     const int games = ok ? qBound(1, requested, 10000) : 100;
     AiPlayer ai(AiPlayer::Difficulty::Standard);
-    const QList<int> rounds{24, 32, 40};
+    const QList<int> rounds{90, 120, 150};
     for (int gameIndex = 0; gameIndex < games; ++gameIndex) {
         GameEngine engine;
-        QVERIFY(engine.createGame({QStringLiteral("鲁班"), QStringLiteral("黄道婆"),
-            QStringLiteral("李时珍"), QStringLiteral("沈括")}, 4, rounds[gameIndex % rounds.size()], quint64(gameIndex + 1)));
+        QVERIFY(engine.createGame({QStringLiteral("程砚"), QStringLiteral("唐织"),
+            QStringLiteral("夏岚"), QStringLiteral("周衡")}, 4, rounds[gameIndex % rounds.size()], quint64(gameIndex + 1)));
         quint64 commandId = 0;
         int actions = 0;
-        while (engine.state().phase != GamePhase::Finished && actions < 12000) {
+        while (engine.state().phase != GamePhase::Finished && actions < 40000) {
+            if (engine.state().phase == GamePhase::Moving) {
+                QVERIFY(engine.advanceMovementStep().accepted);
+                ++actions;
+                continue;
+            }
             const auto command = ai.chooseCommand(engine.state(), ++commandId);
             QVERIFY2(!command.playerId.isNull(), "AI failed to find a legal acting player");
             const auto result = engine.apply(command);

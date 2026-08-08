@@ -11,9 +11,10 @@ class GameEngine final {
 public:
     GameEngine();
 
-    bool createGame(const QStringList &playerNames, int aiPlayers = 0, int maxRounds = 32,
+    bool createGame(const QStringList &playerNames, int aiPlayers = 0, int maxRounds = 120,
                     quint64 seed = 0, QString *error = nullptr);
     CommandResult apply(const GameCommand &command);
+    CommandResult advanceMovementStep();
     QList<GameEvent> expireTimedPhase(qint64 nowMs);
     void restore(GameState state);
     bool setAiControlled(const QUuid &playerId, bool controlled);
@@ -38,7 +39,7 @@ private:
     CommandResult sellProperty(const GameCommand &command);
     CommandResult contributeCivic(const GameCommand &command);
     QList<QList<int>> enumerateRoutes(const PlayerState &player, int steps) const;
-    void moveAlongRoute(PlayerState &player, const QList<int> &route, QList<GameEvent> &events);
+    void beginMovement(PlayerState &player, const QList<int> &route, QList<GameEvent> &events);
     void startAuction(int tileIndex, QList<GameEvent> &events);
     void settleAuction(QList<GameEvent> &events);
     bool validateTradeAssets(const TradeOfferState &trade, QString *error) const;

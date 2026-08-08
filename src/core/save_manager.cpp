@@ -1,4 +1,5 @@
 #include "core/save_manager.h"
+#include "core/city_content.h"
 
 #include <QCryptographicHash>
 #include <QDateTime>
@@ -93,6 +94,16 @@ GameState SaveManager::load(const QString &path, QString *error)
     if (magic != MagicV2 || !headerDocument.isObject() || header.value(QStringLiteral("formatVersion")).toInt() != 2
         || expected != actual) {
         if (error) *error = QStringLiteral("存档头或SHA-256校验无效");
+        return {};
+    }
+    const QByteArray savedContentHash = header.value(QStringLiteral("contentHash")).toString().toLatin1();
+    if (savedContentHash != CityContent::contentHash()) {
+        file.close();
+        QString archived;
+        const bool moved = archiveLegacySave(path, &archived);
+        if (error) *error = moved
+            ? QStringLiteral("旧内容版本存档不兼容，已安全归档到：%1").arg(archived)
+            : QStringLiteral("检测到旧内容版本存档，但无法移动到归档目录");
         return {};
     }
     QCborParserError parserError;

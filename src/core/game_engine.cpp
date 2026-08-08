@@ -17,8 +17,8 @@ bool GameEngine::createGame(const QStringList &playerNames, int aiPlayers, int m
         if (error) *error = QStringLiteral("对局需要2至6名玩家");
         return false;
     }
-    if (maxRounds != 24 && maxRounds != 32 && maxRounds != 40) {
-        if (error) *error = QStringLiteral("轮数必须为24、32或40");
+    if (maxRounds != 90 && maxRounds != 120 && maxRounds != 150) {
+        if (error) *error = QStringLiteral("回合数必须为90、120或150");
         return false;
     }
     m_state = {};
@@ -66,6 +66,7 @@ const PlayerState *GameEngine::playerById(const QUuid &id) const
 bool GameEngine::validateCommon(const GameCommand &command, QString *error) const
 {
     if (m_state.phase == GamePhase::Finished) { *error = QStringLiteral("对局已经结束"); return false; }
+    if (m_state.phase == GamePhase::Moving) { *error = QStringLiteral("角色正在移动，请稍候"); return false; }
     const auto *sender = playerById(command.playerId);
     if (command.matchId != m_state.matchId || !sender || sender->bankrupt) {
         *error = QStringLiteral("命令不属于当前对局或玩家无效"); return false;
@@ -143,7 +144,7 @@ QList<QList<int>> GameEngine::enumerateRoutes(const PlayerState &player, int ste
 
 CommandResult GameEngine::roll(const GameCommand &)
 {
-    if (m_state.phase != GamePhase::AwaitingRoll) return {false, QStringLiteral("当前不能投掷行筹"), {}};
+    if (m_state.phase != GamePhase::AwaitingRoll) return {false, QStringLiteral("当前不能投掷骰子"), {}};
     QList<GameEvent> events;
     auto *player = m_state.activePlayer();
     const int raw = int(m_random.bounded(1, 7));
@@ -154,7 +155,7 @@ CommandResult GameEngine::roll(const GameCommand &)
     m_state.routeOptions = enumerateRoutes(*player, steps);
     emitEvent(events, QStringLiteral("rolled"), player->id, {{QStringLiteral("dice"), raw}, {QStringLiteral("steps"), steps}});
     if (m_state.routeOptions.isEmpty()) return {false, QStringLiteral("地图路线异常，无法生成移动路径"), {}};
-    if (m_state.routeOptions.size() == 1) moveAlongRoute(*player, m_state.routeOptions.first(), events);
+    if (m_state.routeOptions.size() == 1) beginMovement(*player, m_state.routeOptions.first(), events);
     else {
         m_state.phase = GamePhase::AwaitingRoute;
         emitEvent(events, QStringLiteral("routeChoiceRequested"), player->id,
@@ -182,25 +183,56 @@ CommandResult GameEngine::chooseRoute(const GameCommand &command)
     const int option = command.arguments.value(QStringLiteral("option"), -1).toInt();
     if (option < 0 || option >= m_state.routeOptions.size()) return {false, QStringLiteral("路线选项无效"), {}};
     QList<GameEvent> events;
-    moveAlongRoute(*m_state.activePlayer(), m_state.routeOptions.at(option), events);
+    beginMovement(*m_state.activePlayer(), m_state.routeOptions.at(option), events);
     return {true, {}, events};
 }
 
-void GameEngine::moveAlongRoute(PlayerState &player, const QList<int> &route, QList<GameEvent> &events)
+void GameEngine::beginMovement(PlayerState &player, const QList<int> &route, QList<GameEvent> &events)
 {
     m_state.phase = GamePhase::Moving;
     QVariantList path;
     for (int node : route) path.append(node);
-    if (!route.isEmpty()) {
-        player.previousPosition = route.size() > 1 ? route.at(route.size() - 2) : player.position;
-        player.position = route.last();
-    }
-    emitEvent(events, QStringLiteral("moved"), player.id,
-              {{QStringLiteral("path"), path}, {QStringLiteral("position"), player.position}});
+    m_state.movingPlayerId = player.id;
+    m_state.pendingMovePath = route;
+    m_state.pendingMoveIndex = 0;
+    ++m_state.movementSerial;
+    emitEvent(events, QStringLiteral("movementStarted"), player.id,
+              {{QStringLiteral("path"), path}, {QStringLiteral("serial"), QVariant::fromValue(m_state.movementSerial)}});
     m_state.routeOptions.clear();
     m_state.pendingDice = 0;
-    m_state.phase = GamePhase::AwaitingDecision;
-    resolveLanding(player, events);
+}
+
+CommandResult GameEngine::advanceMovementStep()
+{
+    if (m_state.phase != GamePhase::Moving)
+        return {false, QStringLiteral("当前没有正在进行的移动"), {}};
+    auto *player = playerById(m_state.movingPlayerId);
+    if (!player || m_state.pendingMoveIndex < 0
+        || m_state.pendingMoveIndex >= m_state.pendingMovePath.size()) {
+        return {false, QStringLiteral("移动状态损坏，无法继续"), {}};
+    }
+
+    QList<GameEvent> events;
+    player->previousPosition = player->position;
+    player->position = m_state.pendingMovePath.at(m_state.pendingMoveIndex++);
+    emitEvent(events, QStringLiteral("movementStep"), player->id,
+              {{QStringLiteral("position"), player->position},
+               {QStringLiteral("index"), m_state.pendingMoveIndex},
+               {QStringLiteral("total"), m_state.pendingMovePath.size()},
+               {QStringLiteral("serial"), QVariant::fromValue(m_state.movementSerial)}});
+
+    if (m_state.pendingMoveIndex >= m_state.pendingMovePath.size()) {
+        const quint64 serial = m_state.movementSerial;
+        m_state.movingPlayerId = QUuid{};
+        m_state.pendingMovePath.clear();
+        m_state.pendingMoveIndex = 0;
+        m_state.phase = GamePhase::AwaitingDecision;
+        emitEvent(events, QStringLiteral("movementCompleted"), player->id,
+                  {{QStringLiteral("position"), player->position},
+                   {QStringLiteral("serial"), QVariant::fromValue(serial)}});
+        resolveLanding(*player, events);
+    }
+    return {true, {}, events};
 }
 
 bool GameEngine::ensureFunds(PlayerState &player, int amount, QList<GameEvent> &events)
@@ -297,14 +329,14 @@ void GameEngine::resolveLanding(PlayerState &player, QList<GameEvent> &events)
 
 CommandResult GameEngine::buy(const GameCommand &)
 {
-    if (m_state.phase != GamePhase::AwaitingDecision) return {false, QStringLiteral("当前不能置办产业"), {}};
+    if (m_state.phase != GamePhase::AwaitingDecision) return {false, QStringLiteral("当前不能购买产业"), {}};
     auto *player = m_state.activePlayer();
     const auto *tile = m_state.tileAt(player->position);
     auto *property = m_state.propertyAt(player->position);
     if (!tile || !property || tile->type != TileType::Property || !property->ownerId.isNull())
         return {false, QStringLiteral("该产业不能购买"), {}};
     int price = tile->price;
-    if (player->cash < price) return {false, QStringLiteral("银两不足"), {}};
+    if (player->cash < price) return {false, QStringLiteral("资金不足"), {}};
     player->cash -= price;
     player->cash += price * m_state.purchaseRebatePercent / 100;
     player->reputation = qMin(100, player->reputation + 3);
@@ -330,7 +362,7 @@ CommandResult GameEngine::upgrade(const GameCommand &command)
         cost = cost * (100 - player->upgradeDiscountPercent) / 100;
         player->upgradeDiscountPercent = 0;
     }
-    if (player->cash < cost) return {false, QStringLiteral("银两不足"), {}};
+    if (player->cash < cost) return {false, QStringLiteral("资金不足"), {}};
     player->cash -= cost;
     ++property->level;
     player->reputation = qMin(100, player->reputation + 2 + property->level);
@@ -379,7 +411,7 @@ CommandResult GameEngine::placeBid(const GameCommand &command)
     auto *bidder = playerById(command.playerId);
     const int amount = command.arguments.value(QStringLiteral("amount"), m_state.auctionHighBid + 100).toInt();
     if (!bidder || amount < m_state.auctionHighBid + 100 || amount > bidder->cash)
-        return {false, QStringLiteral("出价无效或银两不足"), {}};
+        return {false, QStringLiteral("出价无效或资金不足"), {}};
     m_state.auctionHighBid = amount;
     m_state.auctionHighBidder = bidder->id;
     m_state.auctionPassedPlayers.removeAll(bidder->id);
@@ -432,7 +464,7 @@ CommandResult GameEngine::mortgage(const GameCommand &command)
                   {{QStringLiteral("tile"), tileIndex}, {QStringLiteral("amount"), value}});
     } else {
         const int cost = tile->price * 60 / 100 + property->level * tile->price / 4;
-        if (player->cash < cost) return {false, QStringLiteral("赎回所需银两不足"), {}};
+        if (player->cash < cost) return {false, QStringLiteral("赎回所需资金不足"), {}};
         player->cash -= cost; property->mortgaged = false;
         emitEvent(events, QStringLiteral("industryRedeemed"), player->id,
                   {{QStringLiteral("tile"), tileIndex}, {QStringLiteral("cost"), cost}});
@@ -523,7 +555,7 @@ bool GameEngine::validateTradeAssets(const TradeOfferState &trade, QString *erro
     const auto *recipient = playerById(trade.recipientId);
     if (!proposer || !recipient || proposer->bankrupt || recipient->bankrupt || proposer->cash < trade.offeredCash
         || recipient->cash < trade.requestedCash) {
-        if (error) *error = QStringLiteral("交易双方或银两状态无效"); return false;
+        if (error) *error = QStringLiteral("交易双方或资金状态无效"); return false;
     }
     const auto owns = [&](const QUuid &owner, int tile) {
         if (tile < 0) return true;
@@ -598,7 +630,7 @@ CommandResult GameEngine::contributeCivic(const GameCommand &)
     auto *player = m_state.activePlayer();
     const auto *tile = player ? m_state.tileAt(player->position) : nullptr;
     if (!player || !tile || tile->type != TileType::Civic || m_state.phase != GamePhase::AwaitingDecision || player->cash < 800)
-        return {false, QStringLiteral("当前不能参与民生工程"), {}};
+        return {false, QStringLiteral("当前不能投资公共项目"), {}};
     player->cash -= 800; player->livelihood = qMin(100, player->livelihood + 10);
     player->reputation = qMin(100, player->reputation + 3);
     QList<GameEvent> events;
@@ -622,6 +654,9 @@ QList<GameEvent> GameEngine::expireTimedPhase(qint64 nowMs)
 
 void GameEngine::advancePlayer(QList<GameEvent> &events)
 {
+    m_state.movingPlayerId = QUuid{};
+    m_state.pendingMovePath.clear();
+    m_state.pendingMoveIndex = 0;
     const int alive = std::count_if(m_state.players.cbegin(), m_state.players.cend(), [](const auto &p) { return !p.bankrupt; });
     if (alive <= 1 || m_state.round > m_state.maxRounds) {
         m_state.phase = GamePhase::Finished; emitEvent(events, QStringLiteral("gameFinished"), {}); return;
@@ -633,10 +668,15 @@ void GameEngine::advancePlayer(QList<GameEvent> &events)
             if (m_state.round > m_state.maxRounds) {
                 m_state.phase = GamePhase::Finished; emitEvent(events, QStringLiteral("gameFinished"), {}); return;
             }
-            for (auto &player : m_state.players) if (!player.bankrupt) player.cash += 1200;
-            if ((m_state.round - 1) % 4 == 0) {
-                for (auto &player : m_state.players) player.rerolls = player.characterIndex == 3 ? 2 : 1;
+            for (auto &player : m_state.players) if (!player.bankrupt) player.cash += 260;
+            if ((m_state.round - 1) % 10 == 0) {
                 activateCityPulse(events);
+            }
+            for (auto &player : m_state.players) {
+                if (player.bankrupt) continue;
+                const int cadence = player.characterIndex == 3 ? 4 : 8;
+                const int cap = player.characterIndex == 3 ? 3 : 2;
+                if ((m_state.round - 1) % cadence == 0) player.rerolls = qMin(cap, player.rerolls + 1);
             }
         }
     } while (m_state.players.at(m_state.currentPlayer).bankrupt);
@@ -651,7 +691,7 @@ void GameEngine::advancePlayer(QList<GameEvent> &events)
 void GameEngine::activateCityPulse(QList<GameEvent> &events)
 {
     const auto pulses = CityContent::cityPulseEvents();
-    m_state.activePulse = ((m_state.round - 1) / 4 - 1) % pulses.size();
+    m_state.activePulse = ((m_state.round - 1) / 10 - 1) % pulses.size();
     m_state.rentModifierPercent = 100; m_state.buildingCostPercent = 100; m_state.purchaseRebatePercent = 0;
     switch (m_state.activePulse) {
     case 0: for (auto &p : m_state.players) p.culture = qMin(100, p.culture + 5); break;

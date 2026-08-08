@@ -151,6 +151,7 @@ QCborMap GameState::toCbor(bool includeLog) const
     }
     QCborArray routes;
     for (const auto &route : routeOptions) routes.append(intArray(route));
+    const QCborArray movePath = intArray(pendingMovePath);
     QCborArray passed;
     for (const auto &id : auctionPassedPlayers) passed.append(id.toString(QUuid::WithoutBraces));
 
@@ -161,6 +162,9 @@ QCborMap GameState::toCbor(bool includeLog) const
         {QStringLiteral("maxRounds"), maxRounds}, {QStringLiteral("currentPlayer"), currentPlayer},
         {QStringLiteral("lastDice"), lastDice}, {QStringLiteral("pendingDice"), pendingDice},
         {QStringLiteral("routes"), routes}, {QStringLiteral("phase"), int(phase)},
+        {QStringLiteral("movingPlayer"), movingPlayerId.toString(QUuid::WithoutBraces)},
+        {QStringLiteral("movePath"), movePath}, {QStringLiteral("moveIndex"), pendingMoveIndex},
+        {QStringLiteral("movementSerial"), qint64(movementSerial)},
         {QStringLiteral("activePulse"), activePulse}, {QStringLiteral("rentModifier"), rentModifierPercent},
         {QStringLiteral("buildingCost"), buildingCostPercent}, {QStringLiteral("purchaseRebate"), purchaseRebatePercent},
         {QStringLiteral("auctionTile"), auctionTile}, {QStringLiteral("auctionBid"), auctionHighBid},
@@ -201,6 +205,10 @@ GameState GameState::fromCbor(const QCborMap &map, QString *error)
     state.lastDice = int(map.value(QStringLiteral("lastDice")).toInteger());
     state.pendingDice = int(map.value(QStringLiteral("pendingDice")).toInteger());
     for (const auto &route : map.value(QStringLiteral("routes")).toArray()) state.routeOptions.append(intList(route));
+    state.movingPlayerId = QUuid(map.value(QStringLiteral("movingPlayer")).toString());
+    state.pendingMovePath = intList(map.value(QStringLiteral("movePath")));
+    state.pendingMoveIndex = int(map.value(QStringLiteral("moveIndex")).toInteger());
+    state.movementSerial = quint64(map.value(QStringLiteral("movementSerial")).toInteger());
     state.activePulse = int(map.value(QStringLiteral("activePulse")).toInteger(-1));
     state.rentModifierPercent = int(map.value(QStringLiteral("rentModifier")).toInteger(100));
     state.buildingCostPercent = int(map.value(QStringLiteral("buildingCost")).toInteger(100));
