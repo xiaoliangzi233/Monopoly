@@ -95,7 +95,9 @@ void UpdateController::handleManifestReply(QNetworkReply *reply)
     if (m_manifest.version.isNull()) setStatus(QStringLiteral("未获得可信更新清单，保留当前版本"));
     else if (updateAvailable()) setStatus(QStringLiteral("发现新版本 %1").arg(m_manifest.version.toString()));
     else setStatus(QStringLiteral("当前已是最新已发布版本 %1").arg(m_manifest.version.toString()));
+    const bool shouldAutoDownload = updateAvailable() && m_verifiedPackage.isEmpty();
     emit updateChanged();
+    if (shouldAutoDownload) downloadUpdate();
 }
 
 void UpdateController::downloadUpdate()
