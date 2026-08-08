@@ -7,7 +7,7 @@ echo ============================================
 echo   Shengshi Baiye - One Click Release
 echo ============================================
 
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%ROOT%scripts\publish_release.ps1" -Yes %*
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%ROOT%scripts\publish_release_local.ps1" -Yes %*
 set "RESULT=%ERRORLEVEL%"
 
 echo.

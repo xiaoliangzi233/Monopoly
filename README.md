@@ -55,20 +55,26 @@ v0.2.0 文件名为 `ShengshiBaiye-0.2.0-win64.exe`。安装器会创建桌面�
 
 ## 一键发布
 
-仓库根目录的 `publish_release.bat` 会检查环境，构建并运行 10,000 局测试，推送 `main` 到 GitHub/Gitee，创建版本标签并等待 GitHub Actions 生成安装包和双源 Release。
+仓库根目录的 `publish_release.bat` 默认使用本机发布，不消耗 GitHub Actions：它会构建并运行 10,000 局测试、生成 NSIS 安装包、创建 GitHub/Gitee Release、使用原 Ed25519 私钥签名，并推送双源更新清单。
 
 ```powershell
-# 只检查，不产生提交、标签或远端变更
-.\scripts\publish_release.ps1 -Version 0.2.0 -SkipTests -DryRun -Yes
+# 只检查本机构建与密钥，不产生标签或远端变更
+.\scripts\publish_release_local.ps1 -Version 0.2.0 -SkipTests -DryRun -Yes
 
 # 发布当前已经写入 VERSION 的 v0.2.0
 .\publish_release.bat -Version 0.2.0
 
-# 修复外部服务后重跑已有标签
-.\publish_release.bat -RetryTag v0.2.0
+# 如需继续使用 GitHub Actions 发布，可显式运行旧流程
+.\scripts\publish_release.ps1 -Version 0.2.0 -Yes
 ```
 
-发布需要 GitHub Repository Secrets：
+本机发布需要仅存在于当前 PowerShell 会话中的环境变量：
+
+- `UPDATE_SIGNING_KEY`：与现有启动器公钥匹配的 Ed25519 私钥 Base64。
+- `GITEE_TOKEN`：已轮换的新最小权限令牌。
+
+首次使用前安装签名和 Gitee API 依赖：`python -m pip install pynacl requests`。
+脚本会先验证私钥是否匹配生产公钥，不匹配时不会创建标签。不要将私钥或令牌写入批处理、仓库或日志。GitHub Actions 备用流程则需要 Repository Secrets：
 
 - `UPDATE_SIGNING_KEY`：原有 Ed25519 私钥的 Base64，仅供 CI 签署清单。
 - `GITEE_TOKEN`：撤销曾在聊天或日志中暴露的令牌后创建的新最小权限令牌。
