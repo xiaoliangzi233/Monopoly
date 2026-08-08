@@ -20,14 +20,20 @@ public:
     CityRootNode()
     {
         transform = new QSGTransformNode;
-        world = new QSGNode;
+        staticWorld = new QSGNode;
+        dynamicWorld = new QSGNode;
         appendChildNode(transform);
-        transform->appendChildNode(world);
+        transform->appendChildNode(staticWorld);
+        transform->appendChildNode(dynamicWorld);
     }
     QSGTransformNode *transform = nullptr;
-    QSGNode *world = nullptr;
+    QSGNode *staticWorld = nullptr;
+    QSGNode *dynamicWorld = nullptr;
     quint64 sequence = std::numeric_limits<quint64>::max();
+    quint64 visualRevision = std::numeric_limits<quint64>::max();
+    quint64 staticFingerprint = std::numeric_limits<quint64>::max();
     QUuid matchId;
+    QUuid dynamicMatchId;
     int lod = -1;
 };
 
@@ -87,8 +93,8 @@ void addLine(QSGNode *root, const QPointF &a, const QPointF &b, qreal width, con
 
 QColor districtColor(int district)
 {
-    static const QList<QColor> colors = {QColor("#476B58"), QColor("#8B4F5D"), QColor("#5D7850"), QColor("#496A75"),
-        QColor("#315F72"), QColor("#8A633D"), QColor("#607A86"), QColor("#755271")};
+    static const QList<QColor> colors = {QColor("#1E7376"), QColor("#3D6684"), QColor("#A23C50"), QColor("#3E8C78"),
+        QColor("#4D8060"), QColor("#B0783E"), QColor("#28758A"), QColor("#785C8C")};
     return colors[qBound(0, district, colors.size() - 1)];
 }
 
@@ -101,145 +107,220 @@ void renderTree(QSGNode *root, const QPointF &p, qreal size)
     addPolygon(root, ellipse(p - QPointF(size * .28, size * .18), size * .62, size * .48), QColor("#4E8054"));
 }
 
-void renderLantern(QSGNode *root, const QPointF &p)
-{
-    addRect(root, {p.x() - 2, p.y() - 17, 4, 20}, QColor("#574235"));
-    QColor glow("#EFCB72"); glow.setAlpha(75);
-    addPolygon(root, ellipse(p - QPointF(0, 17), 11, 11), glow);
-    addRect(root, {p.x() - 6, p.y() - 23, 12, 13}, QColor("#B83A2D"));
-    addRect(root, {p.x() - 1, p.y() - 10, 2, 7}, QColor("#D7A53D"));
-}
-
-void renderRoof(QSGNode *root, const QRectF &rect, const QColor &base, qreal opacity, bool vertical)
-{
-    QColor shadow("#243027"); shadow.setAlphaF(.38 * opacity);
-    addRect(root, rect.translated(8, 9), shadow);
-    QColor eave = base.darker(135); eave.setAlphaF(opacity);
-    QColor tile = base; tile.setAlphaF(opacity);
-    QColor ridge = base.lighter(128); ridge.setAlphaF(opacity);
-    addRect(root, rect, eave);
-    const QRectF inner = rect.adjusted(7, 7, -7, -7);
-    addRect(root, inner, tile);
-    if (vertical) {
-        addRect(root, {inner.center().x() - 3, inner.top(), 6, inner.height()}, ridge);
-        addPolygon(root, {{rect.left() - 7, rect.top() + 4}, {rect.left(), rect.top()},
-                          {rect.left(), rect.bottom()}, {rect.left() - 7, rect.bottom() - 4}}, eave);
-        addPolygon(root, {{rect.right() + 7, rect.top() + 4}, {rect.right(), rect.top()},
-                          {rect.right(), rect.bottom()}, {rect.right() + 7, rect.bottom() - 4}}, eave);
-        for (qreal x = inner.left() + 10; x < inner.right(); x += 12)
-            addRect(root, {x, inner.top() + 3, 2, inner.height() - 6}, base.lighter(118));
-    } else {
-        addRect(root, {inner.left(), inner.center().y() - 3, inner.width(), 6}, ridge);
-        addPolygon(root, {{rect.left() + 4, rect.top() - 7}, {rect.left(), rect.top()},
-                          {rect.right(), rect.top()}, {rect.right() - 4, rect.top() - 7}}, eave);
-        addPolygon(root, {{rect.left() + 4, rect.bottom() + 7}, {rect.left(), rect.bottom()},
-                          {rect.right(), rect.bottom()}, {rect.right() - 4, rect.bottom() + 7}}, eave);
-        for (qreal y = inner.top() + 9; y < inner.bottom(); y += 11)
-            addRect(root, {inner.left() + 3, y, inner.width() - 6, 2}, base.lighter(118));
-    }
-}
-
-void renderCourtyard(QSGNode *root, const QRectF &lot, const QColor &accent)
-{
-    const QColor stone("#D8C9A6");
-    const QColor wall("#EEE2C4");
-    const QColor wallCap("#5A6259");
-    addRect(root, lot, QColor("#6A563D"));
-    addRect(root, lot.adjusted(5, 5, -5, -5), stone);
-    addRect(root, {lot.left() + 7, lot.top() + 7, lot.width() - 14, 9}, wall);
-    addRect(root, {lot.left() + 7, lot.bottom() - 16, lot.width() - 14, 9}, wall);
-    addRect(root, {lot.left() + 7, lot.top() + 7, 9, lot.height() - 14}, wall);
-    addRect(root, {lot.right() - 16, lot.top() + 7, 9, lot.height() - 14}, wall);
-    addRect(root, {lot.left() + 7, lot.top() + 5, lot.width() - 14, 4}, wallCap);
-    addRect(root, {lot.left() + 7, lot.bottom() - 9, lot.width() - 14, 4}, wallCap);
-    addRect(root, {lot.center().x() - 33, lot.bottom() - 19, 66, 16}, stone);
-    addRect(root, {lot.center().x() - 24, lot.bottom() - 23, 48, 6}, accent);
-    for (qreal x = lot.left() + 28; x < lot.right() - 20; x += 34)
-        addLine(root, {x, lot.top() + 22}, {x + 18, lot.top() + 40}, 2, QColor("#B7A37C"));
-}
-
-void renderMarketStall(QSGNode *root, const QPointF &p, const QColor &accent)
-{
-    addRect(root, {p.x() - 25, p.y() - 13, 50, 28}, QColor("#8C653E"));
-    addRect(root, {p.x() - 29, p.y() - 19, 58, 12}, accent);
-    for (int i = -2; i <= 2; ++i)
-        addRect(root, {p.x() + i * 11 - 3, p.y() - 19, 6, 12}, QColor("#E8D7AA"));
-    addRect(root, {p.x() - 20, p.y() + 2, 40, 7}, QColor("#C3924F"));
-}
-
 void renderIndustry(QSGNode *root, const TileDefinition &tile, int level, const QColor &owner,
                     bool mortgaged, bool active)
 {
     const QRectF lot = tile.industryFootprint;
-    renderCourtyard(root, lot, districtColor(tile.district));
-    if (mortgaged)
-        addRect(root, lot.adjusted(16, 16, -16, -16), QColor(120, 118, 110, 105));
-    if (level <= 0) {
-        renderTree(root, lot.center() - QPointF(58, 2), 22);
-        renderMarketStall(root, lot.center() + QPointF(36, 4), districtColor(tile.district).lighter(120));
-        addPolygon(root, ellipse(lot.center() + QPointF(-3, 36), 24, 11), QColor("#A4B88D"));
-        return;
+    const int visualLevel = qBound(1, level, 3);
+    const int seed = tile.index * 37 + tile.district * 19;
+    const QColor accent = districtColor(tile.district);
+    QColor glass = accent.darker(142); glass.setAlpha(245);
+    QColor glassLight = accent.lighter(168); glassLight.setAlpha(215);
+    QColor metal("#A8B9B6");
+    QColor warm("#E1B75D");
+    if (active) { glass.setAlpha(150); glassLight.setAlpha(145); }
+
+    addRect(root, lot, QColor("#31474A"));
+    addRect(root, lot.adjusted(5, 5, -5, -5), QColor("#D6D9D0"));
+    addRect(root, {lot.left() + 8, lot.bottom() - 28, lot.width() - 16, 20}, QColor("#667C75"));
+    addLine(root, {lot.left() + 18, lot.bottom() - 18}, {lot.right() - 18, lot.bottom() - 18}, 3, warm);
+
+    auto tower = [&](QRectF body, int bays, bool terrace) {
+        addRect(root, body.translated(8, 8), QColor(15, 31, 34, 90));
+        addRect(root, body, glass);
+        addRect(root, {body.left(), body.top(), body.width(), 7}, metal);
+        if (terrace) {
+            addRect(root, {body.left() - 7, body.top() + body.height() * .46,
+                           body.width() + 14, 8}, QColor("#D6DAD2"));
+            addRect(root, {body.left() - 3, body.top() + body.height() * .46 - 5,
+                           body.width() + 6, 3}, accent.lighter(148));
+        }
+        for (int bay = 1; bay < bays; ++bay)
+            addRect(root, {body.left() + bay * body.width() / bays - 1, body.top() + 9,
+                           2, body.height() - 16}, glassLight);
+        for (qreal y = body.top() + 18; y < body.bottom() - 8; y += 20)
+            addRect(root, {body.left() + 5, y, body.width() - 10, 2}, QColor("#D6B85F"));
+    };
+
+    switch (tile.district) {
+    case 0: { // 智造湾：锯齿厂房、机械核心与连廊
+        tower({lot.left() + 22, lot.top() + 42, lot.width() - 44, 64.0 + visualLevel * 12.0}, 6, false);
+        for (int i = 0; i < 5; ++i)
+            addPolygon(root, {{lot.left() + 30 + i * 45.0, lot.top() + 42},
+                              {lot.left() + 48 + i * 45.0, lot.top() + 24 - (seed % 9)},
+                              {lot.left() + 70 + i * 45.0, lot.top() + 42}}, metal);
+        addPolygon(root, ellipse(lot.center() + QPointF(0, 12), 20 + visualLevel * 4, 20, 18), accent.lighter(145));
+        break;
     }
-    const qreal opacity = active ? .55 : 1.0;
-    QColor roof = districtColor(tile.district).lighter(115);
-    renderRoof(root, {lot.left() + 27, lot.top() + 27, lot.width() - 54, 64}, roof, opacity, false);
-    addRect(root, {lot.center().x() - 21, lot.bottom() - 50, 42, 45}, QColor("#B9925D"));
-    addRect(root, {lot.center().x() - 8, lot.bottom() - 29, 16, 24}, QColor("#713A2E"));
-    if (level >= 2) {
-        renderRoof(root, {lot.left() + 12, lot.top() + 50, 55, lot.height() - 65}, roof.darker(108), opacity, true);
-        renderRoof(root, {lot.right() - 67, lot.top() + 50, 55, lot.height() - 65}, roof.darker(108), opacity, true);
+    case 1: { // 云创中心：双塔、空中连廊、数据灯带
+        tower({lot.left() + 33, lot.top() + 22, 70, 88.0 + visualLevel * 13.0}, 3, true);
+        tower({lot.right() - 108, lot.top() + 38 - (seed % 8), 75, 76.0 + visualLevel * 15.0}, 3, true);
+        addRect(root, {lot.center().x() - 45, lot.top() + 70, 90, 15}, glassLight);
+        addRect(root, {lot.center().x() - 41, lot.top() + 74, 82, 4}, warm);
+        break;
     }
-    if (level >= 3) {
-        renderRoof(root, {lot.center().x() - 42, lot.top() + 4, 84, 42}, roof.lighter(112), opacity, false);
-        addPolygon(root, ellipse(lot.center() + QPointF(0, 11), 21, 13), QColor("#4A705D"));
+    case 2: { // 潮流艺仓：错位盒子、展厅天窗、朱红框架
+        tower({lot.left() + 24, lot.top() + 54, 128, 65}, 4, false);
+        tower({lot.left() + 116, lot.top() + 25, 138, 68.0 + visualLevel * 10.0}, 5, false);
+        addPolygon(root, {{lot.left() + 38, lot.top() + 54}, {lot.left() + 94, lot.top() + 20},
+                          {lot.left() + 146, lot.top() + 54}}, QColor("#C23C44"));
+        addRect(root, {lot.left() + 12, lot.top() + 44, 7, 88}, QColor("#C23C44"));
+        break;
     }
-    if (tile.district == 1 || tile.district == 5)
-        renderMarketStall(root, lot.topRight() + QPointF(-54, 39), QColor("#A93A31"));
-    if (tile.district == 2 || tile.district == 7)
-        renderTree(root, lot.topLeft() + QPointF(34, 42), 16);
-    QColor ownership = owner; ownership.setAlpha(220);
-    addRect(root, {lot.left() + 8, lot.top() + 8, 34, 8}, ownership);
-    renderLantern(root, lot.bottomRight() - QPointF(22, 7));
+    case 3: { // 健康新城：弧形体量、空中花园
+        addPolygon(root, ellipse(lot.center() - QPointF(0, 12), 102, 58 + visualLevel * 7, 28), glass);
+        addPolygon(root, ellipse(lot.center() - QPointF(0, 17), 78, 39 + visualLevel * 4, 28), QColor("#E5E7DF"));
+        addPolygon(root, ellipse(lot.center() - QPointF(0, 19), 56, 25, 24), QColor("#5A9C78"));
+        addRect(root, {lot.center().x() - 11, lot.center().y() + 13, 22, 45}, glassLight);
+        break;
+    }
+    case 4: { // 低碳绿谷：退台、光伏屋顶、垂直绿化
+        tower({lot.left() + 31, lot.top() + 58, lot.width() - 62, 69}, 5, true);
+        if (visualLevel >= 2) tower({lot.left() + 73, lot.top() + 30, lot.width() - 146, 47}, 3, true);
+        for (int i = 0; i < 4; ++i)
+            addRect(root, {lot.left() + 42 + i * 51.0, lot.top() + 63, 34, 18}, QColor("#245B70"));
+        addRect(root, {lot.left() + 22, lot.top() + 91, 12, 38}, QColor("#4F8A62"));
+        addRect(root, {lot.right() - 34, lot.top() + 74, 12, 55}, QColor("#4F8A62"));
+        break;
+    }
+    case 5: { // 都会商圈：高低塔楼、裙房、金色冠部
+        tower({lot.left() + 25, lot.top() + 54, lot.width() - 50, 73}, 7, false);
+        tower({lot.left() + 68, lot.top() + 15, 67, 92.0 + visualLevel * 11.0}, 3, true);
+        tower({lot.right() - 121, lot.top() + 32, 64, 76.0 + visualLevel * 8.0}, 3, false);
+        addPolygon(root, {{lot.left() + 67, lot.top() + 15}, {lot.left() + 101, lot.top() - 4},
+                          {lot.left() + 136, lot.top() + 15}}, warm);
+        break;
+    }
+    case 6: { // 滨水港区：仓储模块、起重臂、物流连廊
+        tower({lot.left() + 20, lot.top() + 60, 168, 66}, 6, false);
+        tower({lot.right() - 91, lot.top() + 36, 63, 90}, 3, false);
+        addLine(root, {lot.left() + 40, lot.top() + 57}, {lot.left() + 40, lot.top() + 15}, 7, QColor("#E0B354"));
+        addLine(root, {lot.left() + 40, lot.top() + 16}, {lot.left() + 126, lot.top() + 16}, 6, QColor("#E0B354"));
+        addLine(root, {lot.left() + 123, lot.top() + 16}, {lot.left() + 150, lot.top() + 45}, 5, QColor("#E0B354"));
+        break;
+    }
+    default: { // 城市乐活区：剧场弧顶、开放露台、灯光舞台
+        addPolygon(root, {{lot.left() + 25, lot.bottom() - 28}, {lot.left() + 52, lot.top() + 42},
+                          {lot.center().x(), lot.top() + 16 - visualLevel * 5},
+                          {lot.right() - 52, lot.top() + 42}, {lot.right() - 25, lot.bottom() - 28}}, glass);
+        addPolygon(root, ellipse(lot.center() + QPointF(0, 25), 76, 38, 24), QColor("#D9DCD4"));
+        addPolygon(root, ellipse(lot.center() + QPointF(0, 25), 55, 25, 24), QColor("#8D3E66"));
+        for (int i = -2; i <= 2; ++i) addLine(root, lot.center() + QPointF(i * 24, 3), lot.center() + QPointF(i * 32, -38), 3, warm);
+        break;
+    }
+    }
+
+    // 每块产业的参数种子改变入口与绿化位置，相邻模型不会形成机械复制。
+    const qreal entranceX = lot.left() + 38 + (seed % 5) * 42.0;
+    addRect(root, {entranceX, lot.bottom() - 42, 27, 32}, QColor("#9C343B"));
+    renderTree(root, lot.topLeft() + QPointF(20 + seed % 31, 29), 13 + seed % 5);
+    renderTree(root, lot.bottomRight() - QPointF(25 + seed % 27, 24), 12 + (seed / 3) % 5);
+    addRect(root, {lot.left() + 10, lot.top() + 10, 38, 7}, owner.isValid() ? owner : accent);
+    if (mortgaged) addRect(root, lot.adjusted(11, 11, -11, -11), QColor(36, 42, 44, 150));
+}
+
+void renderLandmark(QSGNode *root, const QPointF &p, int landmark)
+{
+    const QColor glass("#2C6673"), metal("#CFD8D3"), red("#B73840"), gold("#D6AE56");
+    switch (landmark) {
+    case 0: // 上海中心式螺旋塔
+        for (int i = 0; i < 7; ++i) {
+            const qreal w = 76 - i * 7.0;
+            addPolygon(root, {{p.x() - w / 2 + i * 3, p.y() + 46 - i * 16.0},
+                              {p.x() + w / 2, p.y() + 46 - i * 16.0},
+                              {p.x() + w / 2 - 8, p.y() + 31 - i * 16.0},
+                              {p.x() - w / 2, p.y() + 31 - i * 16.0}}, i % 2 ? glass.lighter(120) : glass);
+        }
+        addLine(root, p + QPointF(11, -64), p + QPointF(18, -91), 4, gold); break;
+    case 1: // 东方明珠式球塔
+        addLine(root, p + QPointF(0, 48), p + QPointF(0, -79), 10, metal);
+        addPolygon(root, ellipse(p + QPointF(0, 5), 31, 25), red);
+        addPolygon(root, ellipse(p + QPointF(0, -46), 18, 15), red.lighter(116));
+        addLine(root, p + QPointF(0, -60), p + QPointF(0, -91), 4, gold); break;
+    case 2: // 广州塔式网格腰身
+        addPolygon(root, {{p.x() - 32, p.y() + 49}, {p.x() - 12, p.y() - 66},
+                          {p.x() + 12, p.y() - 66}, {p.x() + 32, p.y() + 49}}, QColor("#B9CBC6"));
+        for (int i = 0; i < 6; ++i) addLine(root, p + QPointF(-27 + i * 10, 43), p + QPointF(8 - i * 3, -61), 2, red);
+        addLine(root, p + QPointF(0, -66), p + QPointF(0, -91), 4, gold); break;
+    case 3: // 国家体育场式编织结构
+        addPolygon(root, ellipse(p, 55, 38), QColor("#BFCAC6"));
+        addPolygon(root, ellipse(p, 39, 24), QColor("#294A50"));
+        for (int i = -4; i <= 4; ++i) addLine(root, p + QPointF(-48, i * 7), p + QPointF(48, -i * 7), 3, red); break;
+    case 4: // 港珠澳大桥式桥塔
+        addLine(root, p - QPointF(82, 0), p + QPointF(82, 0), 10, metal);
+        for (int side : {-1, 1}) {
+            addLine(root, p + QPointF(side * 34, 22), p + QPointF(side * 34, -48), 8, red);
+            addLine(root, p + QPointF(side * 34, -42), p + QPointF(side * 78, 0), 3, gold);
+        }
+        break;
+    case 5: // 天坛祈年殿的现代化圆形展馆意象
+        addPolygon(root, ellipse(p + QPointF(0, 22), 58, 24), QColor("#D5D8D0"));
+        addPolygon(root, ellipse(p, 47, 31), QColor("#235C68"));
+        addPolygon(root, ellipse(p - QPointF(0, 18), 34, 21), QColor("#2F7180"));
+        addPolygon(root, ellipse(p - QPointF(0, 34), 21, 13), gold); break;
+    case 6: // 长城关城式城市门廊
+        addRect(root, {p.x() - 58, p.y() - 33, 116, 68}, QColor("#8A8173"));
+        addRect(root, {p.x() - 18, p.y() - 4, 36, 39}, QColor("#243B3D"));
+        for (int i = 0; i < 6; ++i) addRect(root, {p.x() - 58 + i * 23.0, p.y() - 45, 15, 14}, red);
+        addLine(root, p - QPointF(88, 23), p - QPointF(58, 4), 16, QColor("#8A8173"));
+        addLine(root, p + QPointF(58, 4), p + QPointF(88, 23), 16, QColor("#8A8173")); break;
+    default: // 江南园林月门与现代景观廊架
+        addPolygon(root, ellipse(p, 51, 51), QColor("#ECE9DF"));
+        addPolygon(root, ellipse(p, 31, 34), QColor("#294B4D"));
+        addLine(root, p - QPointF(76, 35), p + QPointF(76, 35), 8, red);
+        renderTree(root, p - QPointF(62, 9), 20); renderTree(root, p + QPointF(63, 12), 18); break;
+    }
 }
 
 void renderSpecial(QSGNode *root, const TileDefinition &tile)
 {
     const QPointF p = tile.worldPosition;
+    if (tile.styleId.startsWith(QStringLiteral("landmark-"))) {
+        renderLandmark(root, p, tile.styleId.sliced(9).toInt());
+        return;
+    }
     switch (tile.type) {
     case TileType::Start:
-        addRect(root, {p.x() - 58, p.y() - 35, 116, 70}, QColor("#CDBB91"));
-        addRect(root, {p.x() - 49, p.y() - 29, 98, 58}, QColor("#7E302B"));
-        addRect(root, {p.x() - 15, p.y() - 23, 30, 52}, QColor("#E6D6AF"));
+        addPolygon(root, ellipse(p, 63, 48), QColor("#E4E3DB"));
+        addPolygon(root, ellipse(p, 47, 34), QColor("#1F5A60"));
+        addPolygon(root, ellipse(p, 23, 17), QColor("#B93B42"));
+        addLine(root, p - QPointF(70, 0), p + QPointF(70, 0), 5, QColor("#D6AE56"));
         break;
     case TileType::Transit:
-        renderRoof(root, {p.x() - 52, p.y() - 30, 104, 60}, QColor("#426A6C"), 1, false);
-        addLine(root, p - QPointF(80, 0), p + QPointF(80, 0), 8, QColor("#D1B56B"));
+        addRect(root, {p.x() - 58, p.y() - 31, 116, 62}, QColor("#296270"));
+        addPolygon(root, {{p.x() - 70, p.y() - 31}, {p.x(), p.y() - 54}, {p.x() + 70, p.y() - 31}}, QColor("#D9DCD4"));
+        addLine(root, p - QPointF(82, 41), p + QPointF(82, 41), 7, QColor("#D6AE56"));
         break;
     case TileType::Guild:
-        renderRoof(root, {p.x() - 45, p.y() - 32, 90, 64}, QColor("#9D4B3D"), 1, false);
-        addPolygon(root, ellipse(p, 13, 13), QColor("#D5A63B"));
+        addPolygon(root, {{p.x() - 48, p.y() + 35}, {p.x() - 32, p.y() - 35},
+                          {p.x() + 32, p.y() - 35}, {p.x() + 48, p.y() + 35}}, QColor("#315F68"));
+        addPolygon(root, ellipse(p, 16, 16), QColor("#D6AE56"));
         break;
     case TileType::Civic:
-        addPolygon(root, ellipse(p, 44, 32), QColor("#6C9A80"));
-        addPolygon(root, ellipse(p, 25, 18), QColor("#92B9A0"));
-        addPolygon(root, ellipse(p, 10, 8), QColor("#D9E1C7"));
+        addPolygon(root, ellipse(p, 52, 36), QColor("#4F8E73"));
+        addPolygon(root, ellipse(p, 29, 20), QColor("#87B6A0"));
+        addPolygon(root, ellipse(p, 11, 9), QColor("#E3E3D9"));
         break;
     case TileType::Commission:
-        renderRoof(root, {p.x() - 48, p.y() - 29, 96, 58}, QColor("#506C78"), 1, false);
-        addRect(root, {p.x() - 4, p.y() - 18, 8, 36}, QColor("#DCCB9B"));
+        addRect(root, {p.x() - 52, p.y() - 31, 104, 62}, QColor("#315C70"));
+        addRect(root, {p.x() - 44, p.y() - 23, 88, 9}, QColor("#B93B42"));
+        addRect(root, {p.x() - 5, p.y() - 10, 10, 36}, QColor("#D8B65E"));
         break;
     case TileType::Tax:
-        addRect(root, {p.x() - 38, p.y() - 29, 76, 58}, QColor("#C5B28B"));
-        renderRoof(root, {p.x() - 45, p.y() - 35, 90, 30}, QColor("#5B665D"), 1, false);
+        addRect(root, {p.x() - 44, p.y() - 32, 88, 64}, QColor("#D8D8D0"));
+        addPolygon(root, {{p.x() - 52, p.y() - 32}, {p.x(), p.y() - 55}, {p.x() + 52, p.y() - 32}}, QColor("#374F55"));
         break;
     case TileType::Festival:
-        for (int i = -2; i <= 2; ++i) renderLantern(root, p + QPointF(i * 23, 8));
-        addLine(root, p - QPointF(60, 16), p + QPointF(60, 16), 4, QColor("#8A3C31"));
+        addLine(root, p - QPointF(68, 14), p + QPointF(68, 14), 5, QColor("#B93B42"));
+        for (int i = -2; i <= 2; ++i) {
+            addLine(root, p + QPointF(i * 26, 23), p + QPointF(i * 26, -24), 3, QColor("#C5CDD0"));
+            addPolygon(root, ellipse(p + QPointF(i * 26, -27), 9, 9), i % 2 ? QColor("#D8B45C") : QColor("#B93B42"));
+        }
         break;
     case TileType::Event:
-        renderTree(root, p - QPointF(17, 4), 24);
-        addRect(root, {p.x() + 3, p.y() - 18, 45, 36}, districtColor(tile.district).lighter(132));
-        addRect(root, {p.x() + 8, p.y() - 12, 35, 7}, QColor("#E9D39C"));
+        addRect(root, {p.x() - 42, p.y() - 28, 84, 56}, districtColor(tile.district));
+        addRect(root, {p.x() - 34, p.y() - 20, 68, 8}, QColor("#D8B45C"));
+        renderTree(root, p - QPointF(54, 2), 19);
         break;
     default: break;
     }
@@ -260,23 +341,23 @@ void renderPlayer(QSGNode *root, const QPointF &p, const QColor &color, bool act
     addRect(root, {p.x() - 10, p.y() + 20 + index * 2, 20, 4}, color.lighter(150));
 }
 
-void rebuildWorld(QSGNode *root, const GameState &state, int lod)
+void rebuildStaticWorld(QSGNode *root, const GameState &state, int lod)
 {
-    addRect(root, SceneLayout::worldBounds(), QColor("#B9C6A2"));
-    addRect(root, {0, 0, 4096, 170}, QColor("#315D63"));
-    addRect(root, {0, 2870, 4096, 202}, QColor("#315D63"));
-    addRect(root, {1960, 0, 176, 3072}, QColor("#5E8790"));
+    addRect(root, SceneLayout::worldBounds(), QColor("#9EAFA4"));
+    addRect(root, {0, 0, 4096, 170}, QColor("#174954"));
+    addRect(root, {0, 2870, 4096, 202}, QColor("#174954"));
+    addRect(root, {1960, 0, 176, 3072}, QColor("#327487"));
     for (int wave = 0; wave < 18; ++wave) {
         const qreal x = 70.0 + wave * 236.0;
-        addLine(root, {x, 83}, {x + 88, 83}, 3, QColor("#8DB2AA"));
-        addLine(root, {x + 28, 2985}, {x + 116, 2985}, 3, QColor("#8DB2AA"));
+        addLine(root, {x, 83}, {x + 88, 83}, 3, QColor("#75AEB0"));
+        addLine(root, {x + 28, 2985}, {x + 116, 2985}, 3, QColor("#75AEB0"));
     }
     for (int bridge = 0; bridge < 3; ++bridge) {
         const qreal y = 560.0 + bridge * 890.0;
-        addRect(root, {1944, y - 72, 208, 144}, QColor("#73624D"));
-        addRect(root, {1952, y - 63, 192, 126}, QColor("#D1BF91"));
+        addRect(root, {1944, y - 72, 208, 144}, QColor("#273E42"));
+        addRect(root, {1952, y - 63, 192, 126}, QColor("#B9C6C1"));
         for (int plank = 0; plank < 6; ++plank)
-            addRect(root, {1960 + plank * 30.0, y - 58, 3, 116}, QColor("#9E875E"));
+            addRect(root, {1960 + plank * 30.0, y - 58, 3, 116}, QColor("#B33C43"));
     }
     for (int district = 0; district < 8; ++district) {
         QColor wash = districtColor(district).lighter(165); wash.setAlpha(70);
@@ -286,22 +367,22 @@ void rebuildWorld(QSGNode *root, const GameState &state, int lod)
         for (int neighbor : tile.neighbors) if (neighbor > tile.index) {
             const auto *other = state.tileAt(neighbor);
             if (!other) continue;
-            addLine(root, tile.worldPosition, other->worldPosition, 86, QColor("#6A6558"));
-            addLine(root, tile.worldPosition, other->worldPosition, 64, QColor("#D3C49D"));
-            if (lod >= 1) addLine(root, tile.worldPosition, other->worldPosition, 3, QColor("#A58C58"));
+            addLine(root, tile.worldPosition, other->worldPosition, 86, QColor("#3A4D4D"));
+            addLine(root, tile.worldPosition, other->worldPosition, 64, QColor("#6E7C79"));
+            if (lod >= 1) addLine(root, tile.worldPosition, other->worldPosition, 3, QColor("#D2B15E"));
             if (lod >= 2) {
                 const QLineF segment(tile.worldPosition, other->worldPosition);
                 for (qreal at = 115; at < segment.length() - 70; at += 135) {
                     const QPointF p = segment.pointAt(at / segment.length());
-                    addPolygon(root, ellipse(p, 7, 5, 12), QColor("#B39A68"));
+                    addPolygon(root, ellipse(p, 7, 5, 12), QColor("#DCE0D9"));
                 }
             }
         }
     }
     for (const auto &tile : state.tiles) {
-        addPolygon(root, ellipse(tile.worldPosition, 58, 42), QColor("#695F50"));
-        addPolygon(root, ellipse(tile.worldPosition, 48, 33), QColor("#D8CBA8"));
-        addPolygon(root, ellipse(tile.worldPosition, 33, 21), QColor("#E8DDBD"));
+        addPolygon(root, ellipse(tile.worldPosition, 58, 42), QColor("#314648"));
+        addPolygon(root, ellipse(tile.worldPosition, 48, 33), QColor("#AAB7B1"));
+        addPolygon(root, ellipse(tile.worldPosition, 33, 21), QColor("#E1E4DC"));
         if (tile.type == TileType::Property) {
             const auto *property = state.propertyAt(tile.index);
             QColor owner("#8A7959");
@@ -319,23 +400,58 @@ void rebuildWorld(QSGNode *root, const GameState &state, int lod)
         } else renderSpecial(root, tile);
         if (lod >= 2 && tile.index % 3 == 0) {
             renderTree(root, tile.worldPosition + QPointF(-105, -66), 17);
-            renderLantern(root, tile.worldPosition + QPointF(90, 43));
+            addLine(root, tile.worldPosition + QPointF(90, 48), tile.worldPosition + QPointF(90, 10), 4, QColor("#40585A"));
+            addPolygon(root, ellipse(tile.worldPosition + QPointF(90, 7), 10, 8), QColor("#E2BA61"));
         }
     }
+}
+
+void rebuildDynamicWorld(QSGNode *root, const GameState &state, const QUuid &animatingPlayerId,
+                         const QPointF &actorFrom, const QPointF &actorTo, qreal actorProgress)
+{
     for (int option = 0; option < state.routeOptions.size(); ++option) {
         const auto &route = state.routeOptions.at(option);
-        const auto *tile = route.isEmpty() ? nullptr : state.tileAt(route.last());
-        if (!tile) continue;
-        QColor choice = option == 0 ? QColor("#B83A2D") : QColor("#D5A63B"); choice.setAlpha(155);
-        addPolygon(root, ellipse(tile->worldPosition, 72, 52), choice);
+        QColor choice = option == 0 ? QColor("#C03A42") : QColor("#D5AD55"); choice.setAlpha(155);
+        QPointF previous;
+        bool hasPrevious = false;
+        for (int node : route) {
+            const auto *tile = state.tileAt(node);
+            if (!tile) continue;
+            if (hasPrevious) addLine(root, previous, tile->worldPosition, 16, choice);
+            addPolygon(root, ellipse(tile->worldPosition, 66, 45), choice);
+            previous = tile->worldPosition;
+            hasPrevious = true;
+        }
+    }
+    if (state.phase == GamePhase::Moving && !state.pendingMovePath.isEmpty()) {
+        QColor progress("#E0B559"); progress.setAlpha(185);
+        for (int i = state.pendingMoveIndex; i < state.pendingMovePath.size(); ++i) {
+            const auto *tile = state.tileAt(state.pendingMovePath.at(i));
+            if (tile) addPolygon(root, ellipse(tile->worldPosition, 61, 41), progress);
+        }
     }
     for (int i = 0; i < state.players.size(); ++i) {
         const auto &player = state.players.at(i);
         const auto *tile = state.tileAt(player.position);
         if (!tile || player.bankrupt) continue;
         const QPointF offset((i % 3 - 1) * 27, (i / 3) * 28 - 14);
-        renderPlayer(root, tile->worldPosition + offset, player.color, i == state.currentPlayer, i);
+        const QPointF base = player.id == animatingPlayerId
+            ? actorFrom + (actorTo - actorFrom) * actorProgress : tile->worldPosition;
+        renderPlayer(root, base + offset, player.color, i == state.currentPlayer, i);
     }
+}
+
+quint64 cityStaticFingerprint(const GameState &state)
+{
+    quint64 value = 1469598103934665603ULL;
+    for (const auto &property : state.properties) {
+        value ^= quint64(property.tileIndex + 1) * 1099511628211ULL;
+        value ^= quint64(property.level + 1) << ((property.tileIndex % 7) + 3);
+        value ^= property.mortgaged ? 0x9e3779b97f4a7c15ULL : 0;
+        value ^= qHash(property.ownerId);
+        value *= 1099511628211ULL;
+    }
+    return value;
 }
 
 } // namespace
@@ -347,6 +463,16 @@ TopDownCityView::TopDownCityView(QQuickItem *parent) : QQuickItem(parent)
     m_focusAnimation = new QPropertyAnimation(this, "cameraCenter", this);
     m_focusAnimation->setDuration(450);
     m_focusAnimation->setEasingCurve(QEasingCurve::InOutCubic);
+    m_actorAnimation = new QVariantAnimation(this);
+    m_actorAnimation->setDuration(260);
+    m_actorAnimation->setStartValue(0.0);
+    m_actorAnimation->setEndValue(1.0);
+    m_actorAnimation->setEasingCurve(QEasingCurve::InOutQuad);
+    connect(m_actorAnimation, &QVariantAnimation::valueChanged, this, [this](const QVariant &value) {
+        m_actorProgress = value.toReal();
+        ++m_visualRevision;
+        update();
+    });
 }
 
 QObject *TopDownCityView::viewModel() const { return m_viewModel; }
@@ -357,8 +483,35 @@ void TopDownCityView::setViewModel(QObject *object)
     if (m_viewModel == viewModel) return;
     if (m_viewModel) disconnect(m_viewModel, nullptr, this, nullptr);
     m_viewModel = viewModel;
-    if (m_viewModel) connect(m_viewModel, &GameViewModel::stateChanged, this, &TopDownCityView::update);
+    if (m_viewModel) {
+        connect(m_viewModel, &GameViewModel::stateChanged, this, &TopDownCityView::onViewModelStateChanged);
+        for (const auto &player : m_viewModel->state().players) m_lastPlayerPositions.insert(player.id, player.position);
+    }
     emit viewModelChanged();
+    update();
+}
+
+void TopDownCityView::onViewModelStateChanged()
+{
+    if (!m_viewModel) return;
+    const auto &state = m_viewModel->state();
+    for (const auto &player : state.players) {
+        const int previous = m_lastPlayerPositions.value(player.id, player.position);
+        if (previous != player.position) {
+            const auto *from = state.tileAt(previous);
+            const auto *to = state.tileAt(player.position);
+            if (from && to) {
+                m_animatingPlayerId = player.id;
+                m_actorFrom = from->worldPosition;
+                m_actorTo = to->worldPosition;
+                m_actorProgress = 0.0;
+                m_actorAnimation->stop();
+                m_actorAnimation->start();
+            }
+        }
+        m_lastPlayerPositions.insert(player.id, player.position);
+    }
+    ++m_visualRevision;
     update();
 }
 
@@ -480,15 +633,28 @@ QSGNode *TopDownCityView::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData 
     if (!m_viewModel) return root;
     const auto &state = m_viewModel->state();
     const int lod = effectiveZoom() < .72 ? 0 : (effectiveZoom() < 1.35 ? 1 : 2);
-    if (root->sequence != state.sequence || root->matchId != state.matchId || root->lod != lod) {
-        root->transform->removeChildNode(root->world);
-        delete root->world;
-        root->world = new QSGNode;
-        root->transform->appendChildNode(root->world);
-        rebuildWorld(root->world, state, lod);
-        root->sequence = state.sequence;
+    const quint64 staticFingerprint = cityStaticFingerprint(state);
+    if (root->staticFingerprint != staticFingerprint || root->matchId != state.matchId || root->lod != lod) {
+        root->transform->removeChildNode(root->staticWorld);
+        delete root->staticWorld;
+        root->staticWorld = new QSGNode;
+        root->transform->prependChildNode(root->staticWorld);
+        rebuildStaticWorld(root->staticWorld, state, lod);
+        root->staticFingerprint = staticFingerprint;
         root->matchId = state.matchId;
         root->lod = lod;
+    }
+    if (root->sequence != state.sequence || root->dynamicMatchId != state.matchId
+        || root->visualRevision != m_visualRevision) {
+        root->transform->removeChildNode(root->dynamicWorld);
+        delete root->dynamicWorld;
+        root->dynamicWorld = new QSGNode;
+        root->transform->appendChildNode(root->dynamicWorld);
+        rebuildDynamicWorld(root->dynamicWorld, state, m_animatingPlayerId,
+                            m_actorFrom, m_actorTo, m_actorProgress);
+        root->sequence = state.sequence;
+        root->visualRevision = m_visualRevision;
+        root->dynamicMatchId = state.matchId;
     }
     const qreal scale = effectiveZoom();
     const QPointF center = effectiveCenter();

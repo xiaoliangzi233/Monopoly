@@ -3,6 +3,9 @@
 #include <QPointF>
 #include <QPropertyAnimation>
 #include <QQuickItem>
+#include <QVariantAnimation>
+#include <QHash>
+#include <QUuid>
 
 namespace neon {
 
@@ -46,12 +49,20 @@ private:
     qreal effectiveZoom() const;
     QPointF effectiveCenter() const;
     void clampCamera();
+    void onViewModelStateChanged();
 
     GameViewModel *m_viewModel = nullptr;
     qreal m_zoom = .86;
     QPointF m_cameraCenter{720, 610};
     bool m_overviewMode = false;
     QPropertyAnimation *m_focusAnimation = nullptr;
+    QVariantAnimation *m_actorAnimation = nullptr;
+    QHash<QUuid, int> m_lastPlayerPositions;
+    QUuid m_animatingPlayerId;
+    QPointF m_actorFrom;
+    QPointF m_actorTo;
+    qreal m_actorProgress = 1.0;
+    quint64 m_visualRevision = 0;
 };
 
 } // namespace neon
