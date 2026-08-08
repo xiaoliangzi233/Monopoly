@@ -37,8 +37,9 @@ def main() -> None:
         params={"access_token": token},
         timeout=30,
     )
-    if lookup.status_code == 200 and args.replace_existing:
-        old_release = lookup.json()
+    existing_release = lookup.json() if lookup.status_code == 200 else None
+    if existing_release and args.replace_existing:
+        old_release = existing_release
         deletion = requests.delete(
             f"{base}/releases/{old_release['id']}",
             data={"access_token": token},
@@ -50,9 +51,9 @@ def main() -> None:
         if not release_response.ok:
             raise SystemExit(f"Gitee release recreation failed ({release_response.status_code}): {release_response.text}")
         release = release_response.json()
-    elif lookup.status_code == 200:
-        release = lookup.json()
-    elif lookup.status_code == 404:
+    elif existing_release:
+        release = existing_release
+    elif lookup.status_code in (200, 404):
         release_response = requests.post(f"{base}/releases", data=common, timeout=30)
         if not release_response.ok:
             raise SystemExit(f"Gitee release creation failed ({release_response.status_code}): {release_response.text}")
