@@ -60,7 +60,7 @@ Invoke-External -File 'gh' -Arguments @('auth', 'status') -FailureMessage 'GitHu
 [string]$branch = git branch --show-current
 $branch = $branch.Trim()
 if ($branch -ne 'main') { throw "Run releases from main, current branch is '$branch'" }
-$dirty = @(git status --porcelain)
+$dirty = @(git status --porcelain | Where-Object { $_ -notmatch '^\?\? \.VSCodeCounter/' })
 if ($dirty.Count -gt 0) { throw "Working tree is not clean:`n$($dirty -join "`n")" }
 foreach ($remote in @('origin', 'gitee')) {
     git remote get-url $remote *> $null
